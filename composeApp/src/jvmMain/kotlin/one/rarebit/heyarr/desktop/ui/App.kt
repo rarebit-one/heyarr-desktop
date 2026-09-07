@@ -27,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -126,7 +128,8 @@ fun App(
     }
     val shellTheme = if (session.appearance.adaptiveAccents) MediaThemes.of(focusType) else MediaThemes.default
 
-    CompositionLocalProvider(LocalAppearance provides session.appearance) {
+    val uiScale = session.config.effectiveUiScale()
+    CompositionLocalProvider(LocalAppearance provides session.appearance, LocalDensity provides Density(uiScale, fontScale = 1f)) {
         HeyarrTheme(shellTheme) {
             Box(
                 Modifier.fillMaxSize().background(Tokens.bgBase).onPreviewKeyEvent { e ->

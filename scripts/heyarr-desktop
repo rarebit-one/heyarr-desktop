@@ -1,0 +1,15 @@
+#!/bin/bash
+# Launch the packaged app image with the environment a Linux desktop needs:
+#  - _JAVA_AWT_WM_NONREPARENTING=1: Hyprland / sway / dwm are non-reparenting window
+#    managers; without this AWT never accepts the compositor's resize and paints only
+#    its initial 1280×800.
+#  - HEYARR_UI_SCALE: HiDPI Wayland compositors run the JVM through XWayland at 1×
+#    and Compose ignores sun.java2d.uiScale there, so the scale is the app's own
+#    setting (Settings → Appearance), seeded from this variable or GDK_SCALE.
+# Usage: scripts/heyarr-desktop [HEYARR_UI_SCALE=2]
+set -e
+HERE=$(cd "$(dirname "$0")/.." && pwd)
+BIN="$HERE/composeApp/build/compose/binaries/main/app/heyarr-desktop/bin/heyarr-desktop"
+[[ -x "$BIN" ]] || { echo "No app image at $BIN — run: scripts/devcontainer-exec ./gradlew :composeApp:createDistributable" >&2; exit 1; }
+export _JAVA_AWT_WM_NONREPARENTING=1
+exec "$BIN" "$@"

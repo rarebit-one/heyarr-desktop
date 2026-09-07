@@ -192,5 +192,13 @@ private fun AppearancePanel(session: AppSession) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (t in listOf(MediaType.MOVIE, MediaType.SERIES, MediaType.BOOK, MediaType.AUDIOBOOK, MediaType.PODCAST, MediaType.MUSIC)) MediaScope(t) { PrimaryButton(MediaThemes.of(t).ctaLabel, {}, compact = true) }
         }
+        Text("UI scale", style = MaterialTheme.typography.titleSmall, color = Tokens.textPrimary, modifier = Modifier.padding(top = 8.dp))
+        val current = session.config.effectiveUiScale()
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            FilterChip("Auto", session.config.uiScale == null, { session.save(session.config.copy(uiScale = null)) })
+            for (sc in DesktopConfig.UI_SCALES) FilterChip("${sc}×", session.config.uiScale == sc, { session.save(session.config.copy(uiScale = sc)) })
+            Text("now ${current}×", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
+        }
+        Text("A JVM under XWayland on a HiDPI Wayland desktop reports 1× and ignores the JVM scale flags, so pick the scale here (or set HEYARR_UI_SCALE / GDK_SCALE).", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
     }
 }

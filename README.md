@@ -88,6 +88,12 @@ scripts/devcontainer-exec ./gradlew :composeApp:screenshots   # renders every sc
 scripts/devcontainer-exec ./gradlew :composeApp:createDistributable  # Linux app-image with a bundled JRE
 ```
 
+To run the packaged image on this machine (Hyprland / sway / any non-reparenting WM,
+HiDPI Wayland): `scripts/heyarr-desktop`. It sets `_JAVA_AWT_WM_NONREPARENTING=1`
+(otherwise AWT never accepts the compositor's resize) and the UI scale comes from
+Settings → Appearance, seeded from `HEYARR_UI_SCALE` or `GDK_SCALE` — a JVM under
+XWayland reports 1× and ignores `sun.java2d.uiScale` for Compose.
+
 Locally, with a JDK 17 on `PATH`:
 
 ```bash

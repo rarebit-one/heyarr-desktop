@@ -17,9 +17,22 @@ import java.io.File
 data class DesktopConfig(
     val baseUrl: String = DEFAULT_BASE_URL,
     val bearerToken: String = "",
+    /**
+     * UI scale (1.0 = 96 dpi). Null means "detect": `HEYARR_UI_SCALE`, else `GDK_SCALE`,
+     * else 1.0. Explicit because a JVM under XWayland on a HiDPI Wayland compositor
+     * (Hyprland, sway) reports 1x and ignores `sun.java2d.uiScale` for Compose.
+     */
+    val uiScale: Float? = null,
 ) {
+    /** The scale to render at: the saved value, else the environment, else 1x. */
+    fun effectiveUiScale(env: (String) -> String? = System::getenv): Float =
+        uiScale ?: env("HEYARR_UI_SCALE")?.toFloatOrNull()?.takeIf { it in 0.5f..4f }
+            ?: env("GDK_SCALE")?.toFloatOrNull()?.takeIf { it in 0.5f..4f }
+            ?: 1f
+
     companion object {
         const val DEFAULT_BASE_URL = "https://heyarr.br.thesim.family:7777"
+        val UI_SCALES = listOf(1f, 1.25f, 1.5f, 1.75f, 2f)
     }
 }
 
@@ -52,6 +65,7 @@ class FileSettingsStore(
             baseUrl = JsonScan.stringField(obj, "base_url")?.takeIf { it.isNotBlank() }
                 ?: DesktopConfig.DEFAULT_BASE_URL,
             bearerToken = JsonScan.stringField(obj, "bearer_token").orEmpty(),
+            uiScale = JsonScan.stringField(obj, "ui_scale")?.toFloatOrNull()?.takeIf { it in 0.5f..4f },
         )
     }
 
@@ -60,8 +74,9 @@ class FileSettingsStore(
         val json = buildString {
             append("{\n")
             append("  \"base_url\": \"").append(escape(config.baseUrl)).append("\",\n")
-            append("  \"bearer_token\": \"").append(escape(config.bearerToken)).append("\"\n")
-            append("}\n")
+            append("  \"bearer_token\": \"").append(escape(config.bearerToken)).append("\"")
+            config.uiScale?.let { append(",\n  \"ui_scale\": \"").append(it.toString()).append("\"") }
+            append("\n}\n")
         }
         file.writeText(json)
         // Best-effort tighten perms — the token is a secret. POSIX-only; ignored elsewhere.
