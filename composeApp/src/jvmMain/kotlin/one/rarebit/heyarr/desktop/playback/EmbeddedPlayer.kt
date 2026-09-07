@@ -66,6 +66,9 @@ class EmbeddedPlayer(
     var state: PlayerState by mutableStateOf(PlayerState())
         private set
 
+    /** `script-message heyarr <what>` from mpv's bindings — fullscreen, escape, wake, click, dblclick. Called on the reader thread. */
+    var onMessage: ((String) -> Unit)? = null
+
     private var process: Process? = null
     private var channel: SocketChannel? = null
     private var reader: Thread? = null
@@ -104,7 +107,11 @@ class EmbeddedPlayer(
             if (wid != null) add("--wid=$wid")
             add("--input-ipc-server=${sock.absolutePath}")
             addAll(listOf("--idle=yes", "--force-window=yes", "--keep-open=yes", "--cursor-autohide=no", "--no-terminal", "--msg-level=all=error"))
-            if (wid != null) addAll(listOf("--osc=no", "--osd-level=0", "--osd-bar=no", "--input-default-bindings=no", "--input-vo-keyboard=no"))
+            // Embedded: mpv's child window would otherwise swallow the pointer and keys at the X level, above
+            // Compose and the AWT canvas alike. So the pointer is left to the parent (--input-cursor=no lets X
+            // propagate motion and clicks up to the canvas), while keys that reach mpv's window are bound in
+            // its own input.conf and echoed back over IPC as client-messages (see embeddedInputConf).
+            if (wid != null) addAll(listOf("--osc=no", "--osd-level=0", "--osd-bar=no", "--input-default-bindings=no", "--input-vo-keyboard=yes", "--input-cursor=no", "--input-conf=${embeddedInputConf().absolutePath}"))
             // The pop-out is picture only: the app's transport is the one UI in either mode.
             // Keyboard bindings stay on so the window answers space / arrows / f on its own.
             else addAll(listOf("--osc=no", "--osd-level=1", "--osd-bar=no", "--input-default-bindings=yes", "--input-vo-keyboard=yes", "--geometry=60%"))
@@ -207,7 +214,10 @@ class EmbeddedPlayer(
                 while (pending.indexOf("\n").also { nl = it } >= 0) {
                     val line = pending.substring(0, nl).trim()
                     pending.delete(0, nl + 1)
-                    if (line.isNotEmpty()) state = PlayerEvents.apply(state, line)
+                    if (line.isNotEmpty()) {
+                        PlayerEvents.clientMessage(line)?.let { msg -> onMessage?.invoke(msg) }
+                        state = PlayerEvents.apply(state, line)
+                    }
                 }
             }
         } catch (e: IOException) {
@@ -234,6 +244,37 @@ class EmbeddedPlayer(
         "osc-top_buttons_color=#A09F9D", "osc-small_buttonsL_color=#F5F5F4", "osc-small_buttonsR_color=#F5F5F4",
         "osc-time_pos_color=$accentHex", "osc-held_element_color=$accentHex",
     ).joinToString(",")
+
+    /**
+     * Key bindings for the embedded window. Transport keys act inside mpv (the app
+     * mirrors the resulting property changes); the ones that mean something to the
+     * app — fullscreen, escape, a wake on any key — come back as client-messages.
+     */
+    private fun embeddedInputConf(): File {
+        val f = File(System.getProperty("java.io.tmpdir"), "heyarr-mpv-embedded-input.conf")
+        f.writeText(
+            """
+            SPACE       cycle pause; script-message heyarr wake
+            k           cycle pause; script-message heyarr wake
+            LEFT        seek -10; script-message heyarr wake
+            RIGHT       seek 10; script-message heyarr wake
+            j           seek -10; script-message heyarr wake
+            l           seek 10; script-message heyarr wake
+            UP          add volume 5; script-message heyarr wake
+            DOWN        add volume -5; script-message heyarr wake
+            m           cycle mute; script-message heyarr wake
+            c           cycle sub; script-message heyarr wake
+            s           cycle sub; script-message heyarr wake
+            f           script-message heyarr fullscreen
+            ESC         script-message heyarr escape
+            WHEEL_LEFT  seek 5
+            WHEEL_RIGHT seek -5
+            WHEEL_UP    seek 10
+            WHEEL_DOWN  seek -10
+            """.trimIndent() + "\n",
+        )
+        return f
+    }
 
     /**
      * Key bindings for the pop-out: mpv's defaults plus a horizontal wheel that follows
@@ -264,6 +305,14 @@ class EmbeddedPlayer(
 
 /** Pure: fold one mpv IPC line into the state. */
 object PlayerEvents {
+    /** The `<what>` of a `script-message heyarr <what>` client-message line, or null for any other line. */
+    fun clientMessage(line: String): String? {
+        val obj = JsonScan.rootObject(line) ?: return null
+        if (JsonScan.stringField(obj, "event") != "client-message") return null
+        val args = JsonScan.arrayOf(obj, listOf("args"))?.let { one.rarebit.heyarr.desktop.state.RecentSearches.parseStrings(it) } ?: return null
+        return if (args.firstOrNull() == "heyarr") args.getOrNull(1) else null
+    }
+
     fun apply(state: PlayerState, line: String): PlayerState {
         val obj = JsonScan.rootObject(line) ?: return state
         val event = JsonScan.stringField(obj, "event") ?: return state

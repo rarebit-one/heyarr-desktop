@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -138,11 +139,49 @@ fun App(
     LaunchedEffect(focusSearchTick) { if (focusSearchTick > 0) runCatching { searchFocus.requestFocus() } }
 
     fun openSearch() { nav.go(Route.Search); focusSearchTick++ }
+    // A Player route hands its item to the session before the screen composes, so the first
+    // frame already has something to show and nothing bounces back to the previous screen.
+    fun go(route: Route) { if (route is Route.Player) playback.play(route); nav.go(route) }
     val current = nav.current
     // The session player streams with the saved connection; the pop-out OSC takes the media accent.
     LaunchedEffect(session.config, playback.current?.assetId) {
         playback.baseUrl = session.config.baseUrl; playback.token = session.config.bearerToken.trim()
         playback.accentHex = accentHex(MediaThemes.of(playback.type).accent)
+    }
+    // mpv's window gets the keys in fullscreen; it echoes the ones the app must act on.
+    LaunchedEffect(Unit) {
+        playback.player.onMessage = { what ->
+            playback.controlsVisible = true
+            when (what) {
+                "fullscreen", "dblclick" -> setFullscreen(!playback.fullscreen)
+                "escape" -> if (playback.fullscreen) setFullscreen(false) else if (nav.current is Route.Player) nav.back()
+                "click" -> if (playback.onPlayerScreen) playback.player.togglePause()
+            }
+        }
+    }
+    // Player keys are handled at the window level. X keeps the keyboard on Java's focus proxy,
+    // so mpv never sees a key; and which Java component owns focus drifts as the transport
+    // hides and the surface is re-laid out — after an auto-hide nothing answered. A
+    // KeyEventDispatcher runs before focus-owner dispatch (even with no owner at all), so the
+    // player answers whenever its screen is up and no sheet is open.
+    DisposableEffect(Unit) {
+        val kfm = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
+        val dispatcher = java.awt.KeyEventDispatcher { e ->
+            if (e.id != java.awt.event.KeyEvent.KEY_PRESSED || e.isControlDown || e.isMetaDown || e.isAltDown) return@KeyEventDispatcher false
+            if (!playback.onPlayerScreen || playback.popout || want != null || showConnection) return@KeyEventDispatcher false
+            val key = PlayerKeys.fromAwt(e.keyCode) ?: return@KeyEventDispatcher false
+            playback.controlsVisible = true
+            val handled = PlayerKeys.handle(
+                key, playback.player,
+                onFullscreen = { setFullscreen(!playback.fullscreen) },
+                onBack = { if (playback.fullscreen) setFullscreen(false); nav.back() },
+                fullscreen = playback.fullscreen,
+            )
+            if (handled) e.consume()
+            handled
+        }
+        kfm.addKeyEventDispatcher(dispatcher)
+        onDispose { kfm.removeKeyEventDispatcher(dispatcher) }
     }
     // Navigating to a Player route hands the item to the session; the surface host does the rest.
     LaunchedEffect(current) { (current as? Route.Player)?.let { r -> if (playback.current?.assetId != r.assetId) playback.play(r) } }
@@ -197,15 +236,15 @@ fun App(
                             }
                             val onWant: (String, String) -> Unit = { id, title -> want = WantRequest(id, title) }
                             Box(Modifier.weight(1f)) { when (val r = current) {
-                                Route.Home -> HomeScreen(session, home, nav::go, onWant)
-                                Route.Discover -> HomeScreen(session, home, nav::go, onWant, discover = true)
-                                Route.Search -> SearchScreen(session, search, nav::go, onWant, searchFocus)
-                                Route.Library -> LibraryScreen(session, library, nav::go, onWant)
-                                Route.Missing -> MissingScreen(session, missing, nav::go, onWantTitle = { want = WantRequest(null, "") })
+                                Route.Home -> HomeScreen(session, home, ::go, onWant)
+                                Route.Discover -> HomeScreen(session, home, ::go, onWant, discover = true)
+                                Route.Search -> SearchScreen(session, search, ::go, onWant, searchFocus)
+                                Route.Library -> LibraryScreen(session, library, ::go, onWant)
+                                Route.Missing -> MissingScreen(session, missing, ::go, onWantTitle = { want = WantRequest(null, "") })
                                 Route.NowPlaying -> NowPlayingScreen(session, nowPlaying)
                                 Route.Settings -> SettingsScreen(session, settingsState, onSourcesChanged = { search.invalidateSources() })
-                                is Route.Detail -> DetailScreen(session, r, details.getOrPut(r.workId) { DetailState(r.workId) }, onBack = nav::back, onOpen = nav::go, onWant = onWant)
-                                is Route.Player -> PlayerScreen(session, playerScreen, fullscreen = fullscreen, onFullscreen = ::setFullscreen, onBack = { if (fullscreen) setFullscreen(false); nav.back() }, onOpen = nav::go)
+                                is Route.Detail -> DetailScreen(session, r, details.getOrPut(r.workId) { DetailState(r.workId) }, onBack = nav::back, onOpen = ::go, onWant = onWant)
+                                is Route.Player -> PlayerScreen(session, r, playerScreen, fullscreen = fullscreen, onFullscreen = ::setFullscreen, onBack = { if (fullscreen) setFullscreen(false); nav.back() }, onOpen = ::go)
                             } }
                             if (playback.active && current !is Route.Player && !fullscreen) NowPlayingBar(playback, onOpen = { playback.current?.let { nav.go(it) } })
                         }

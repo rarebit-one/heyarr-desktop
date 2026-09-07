@@ -52,6 +52,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.contentDescription
@@ -133,11 +136,13 @@ object PlayerKeys {
  * below), our transport, and what's next. Playback belongs to the session, so leaving
  * this screen keeps it going in the now-playing bar; Back is just Back.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun PlayerScreen(session: AppSession, state: PlayerScreenState, fullscreen: Boolean, onFullscreen: (Boolean) -> Unit, onBack: () -> Unit, onOpen: (Route) -> Unit, modifier: Modifier = Modifier) {
+fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenState, fullscreen: Boolean, onFullscreen: (Boolean) -> Unit, onBack: () -> Unit, onOpen: (Route) -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val playback = session.playback
-    val item = playback.current ?: run { onBack(); return }
+    // The route carries the item for the first frame; the session takes over once it has it.
+    val item = playback.current ?: route
     val type = item.typeHint
     val p = playback.player
     val ps = p.state
@@ -159,7 +164,8 @@ fun PlayerScreen(session: AppSession, state: PlayerScreenState, fullscreen: Bool
 
     MediaScope(type) {
         val theme = LocalMediaTheme.current
-        Column(modifier.fillMaxSize().background(if (fullscreen) Color.Black else Tokens.bgBase)) {
+        // Any pointer movement over the screen (the surface handles its own) wakes the transport.
+        Column(modifier.fillMaxSize().background(if (fullscreen) Color.Black else Tokens.bgBase).onPointerEvent(PointerEventType.Move) { playback.controlsVisible = true }) {
             if (!fullscreen) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 GhostButton(item.from, onBack, icon = Icons.Rounded.ArrowBack)
                 Column(Modifier.weight(1f)) {
