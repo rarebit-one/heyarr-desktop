@@ -49,6 +49,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -82,6 +83,10 @@ import one.rarebit.heyarr.desktop.mcp.Satisfaction
 import one.rarebit.heyarr.desktop.music.Track
 import one.rarebit.heyarr.desktop.playback.PlayResult
 import one.rarebit.heyarr.desktop.state.AppSession
+import one.rarebit.heyarr.desktop.state.ExternalEpisode
+import one.rarebit.heyarr.desktop.state.ExternalMeta
+import one.rarebit.heyarr.desktop.state.MetaKey
+import one.rarebit.heyarr.desktop.ui.components.rememberCover
 import one.rarebit.heyarr.desktop.state.LibraryStatus
 import one.rarebit.heyarr.desktop.state.Toast
 import one.rarebit.heyarr.desktop.state.rememberArtwork
@@ -137,6 +142,9 @@ class DetailState(val workId: String) {
     /** Set by the screen each composition: how to open the embedded player. */
     var openPlayer: (Route.Player) -> Unit = {}
     var wantMenu by mutableStateOf(false)
+    /** What a public source said about this work (cover, synopsis, TVmaze id) — labelled as external wherever shown. */
+    var external by mutableStateOf<ExternalMeta?>(null)
+    var externalEpisodes by mutableStateOf<List<ExternalEpisode>>(emptyList())
 }
 
 /**
@@ -163,6 +171,14 @@ fun DetailScreen(session: AppSession, route: Route.Detail, state: DetailState, o
                 onFailure = { state.detailError = it.message },
             )
             state.loading = false
+            val d = state.detail ?: return@launch
+            if (session.config.externalMetadata) {
+                val t = MediaType.from(d.work.kind)
+                val feedRef = if (t == MediaType.FEED || t == MediaType.PODCAST) session.io { a.followed() }.getOrNull()?.firstOrNull { it.workId == d.work.id }?.feedRef else null
+                val meta = session.external.lookup(MetaKey(t, d.work.title, d.work.year, d.work.artist ?: d.work.author, feedRef))
+                state.external = meta
+                meta?.tvmazeId?.let { id -> state.externalEpisodes = session.external.episodes(id) }
+            }
         }
         scope.launch { session.io { a.assets(route.workId) }.onSuccess { state.assets = it } }
         scope.launch { session.io { a.externalIds(route.workId) }.onSuccess { state.externalIds = it } }
@@ -272,7 +288,8 @@ private fun playLocal(session: AppSession, state: DetailState, blobHash: String,
 @Composable
 private fun DetailHero(session: AppSession, detail: WorkDetail, type: MediaType, wants: List<DesiredItem>, state: DetailState, seasons: List<Season>, onWant: (String, String) -> Unit) {
     val scope = rememberCoroutineScope()
-    val art by session.artwork.rememberArtwork(detail.artworkPath)
+    val cover by rememberCover(session, type, detail.work.title, detail.artworkPath, detail.work.year, detail.work.artist ?: detail.work.author)
+    val art = cover.bitmap
     val theme = MediaThemes.of(type)
     val status = session.index.statusOf(detail.work.id)
     val asset = detail.primaryAsset
@@ -360,15 +377,22 @@ private fun CastPicker(session: AppSession, state: DetailState) {
     }
 }
 
-/** The synopsis, when the node has one — and an honest line when it has not. */
+/** The synopsis: the node's when it has one, else a public source's (labelled), else an honest line. */
 @Composable
 private fun SynopsisBlock(detail: WorkDetail, type: MediaType, seasons: List<Season>, state: DetailState) {
-    val synopsis = listOf("overview", "synopsis", "description", "summary").firstNotNullOfOrNull { k -> detail.attributes[k]?.takeIf { it.isNotBlank() } }
+    val own = listOf("overview", "synopsis", "description", "summary").firstNotNullOfOrNull { k -> detail.attributes[k]?.takeIf { it.isNotBlank() } }
+    val ext = state.external
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (synopsis != null) Text(synopsis, style = MaterialTheme.typography.bodyLarge, color = Tokens.textPrimary)
-        else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Rounded.Info, contentDescription = null, tint = Tokens.textDisabled, modifier = Modifier.size(14.dp))
-            Text("No synopsis on this node — it needs a metadata provider (TVDB, ADR-0058) to fetch one. Titles, seasons and episodes below come from the files themselves.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+        when {
+            own != null -> Text(own, style = MaterialTheme.typography.bodyLarge, color = Tokens.textPrimary)
+            ext?.synopsis != null -> {
+                Text(ext.synopsis, style = MaterialTheme.typography.bodyLarge, color = Tokens.textPrimary, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                Text("Synopsis${if (ext.imageUrl != null && detail.artworkPath == null) " and cover" else ""} via ${ext.source} — not from your library. The node has no metadata provider (TVDB, ADR-0058).", style = MaterialTheme.typography.labelSmall, color = Tokens.textDisabled)
+            }
+            else -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Rounded.Info, contentDescription = null, tint = Tokens.textDisabled, modifier = Modifier.size(14.dp))
+                Text("No synopsis — the node has no metadata provider and no public source knew this title. Titles, seasons and episodes below come from the files themselves.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+            }
         }
     }
 }
@@ -378,26 +402,31 @@ private fun SynopsisBlock(detail: WorkDetail, type: MediaType, seasons: List<Sea
 private fun SeasonsBlock(session: AppSession, detail: WorkDetail, seasons: List<Season>, state: DetailState, wants: List<DesiredItem>) {
     val scope = rememberCoroutineScope()
     if (state.assets == null) { MediaRowSkeleton(5); return }
-    if (seasons.isEmpty()) { Notice("No episode files are held for this series yet.${if (wants.isNotEmpty()) " heyarr is looking — Curate → Releases shows what it found." else ""}"); return }
-    val selected = seasons.firstOrNull { it.number == state.season } ?: seasons.first()
+    // The calendar: the library's seasons, plus any TVmaze knows that the library has never seen.
+    val ext = state.externalEpisodes
+    val extSeasons = ext.map { it.season }.distinct().filter { n -> seasons.none { it.number == n } }.sorted()
+    val all: List<Season> = (seasons + extSeasons.map { Season(it, emptyList()) }).sortedWith(compareBy({ it.number == null }, { if (it.number == 0) Int.MAX_VALUE else it.number ?: 0 }))
+    if (all.isEmpty()) { Notice("No episode files are held for this series yet.${if (wants.isNotEmpty()) " heyarr is looking — Curate → Releases shows what it found." else ""}"); return }
+    val selected = all.firstOrNull { it.number == state.season } ?: seasons.firstOrNull() ?: all.first()
+    val extForSeason = ext.filter { it.season == selected.number }.associateBy { it.number }
+    val known = maxOf(selected.episodes.mapNotNull { it.number }.maxOrNull() ?: 0, extForSeason.keys.maxOrNull() ?: 0)
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        SectionHeader("Episodes", subtitle = "${selected.held} of ${selected.episodes.size} held${selected.gaps.takeIf { it.isNotEmpty() }?.let { " · ${it.size} not held" } ?: ""}", trailing = {
+        SectionHeader("Episodes", subtitle = "${selected.held} of $known held" + (if (ext.isNotEmpty()) "  ·  calendar via TVmaze" else ""), trailing = {
             SecondaryButton(if (state.wantMenu) "Close" else "Want more…", { state.wantMenu = !state.wantMenu }, icon = Icons.Rounded.Add, compact = true)
         })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (s in seasons) FilterChip(s.label, s == selected, { state.season = s.number }, count = s.episodes.size)
+            for (s in all) FilterChip(s.label, s == selected, { state.season = s.number }, count = maxOf(s.episodes.size, ext.count { it.season == s.number }).takeIf { it > 0 })
         }
-        if (state.wantMenu) WantSeasonsPanel(session, detail, seasons, wants, state)
+        if (state.wantMenu) WantSeasonsPanel(session, detail, all, wants, state)
         val rows: List<Any> = buildList {
             val byNumber = selected.episodes.associateBy { it.number }
-            val max = selected.episodes.mapNotNull { it.number }.maxOrNull() ?: 0
-            for (n in 1..max) add(byNumber[n] ?: n)
-            addAll(selected.episodes.filter { it.number == null || it.number > max })
+            for (n in 1..known) add(byNumber[n] ?: n)
+            addAll(selected.episodes.filter { it.number == null || it.number > known })
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             for (row in rows) when (row) {
-                is Episode -> EpisodeRow(session, detail, row, state)
-                is Int -> MissingEpisodeRow(session, selected, row, wants, state)
+                is Episode -> EpisodeRow(session, detail, row, state, extForSeason[row.number])
+                is Int -> MissingEpisodeRow(session, selected, row, wants, state, extForSeason[row])
             }
         }
     }
@@ -462,10 +491,13 @@ private fun WantSeasonsPanel(session: AppSession, detail: WorkDetail, seasons: L
 }
 
 @Composable
-private fun EpisodeRow(session: AppSession, detail: WorkDetail, ep: Episode, state: DetailState) {
+private fun EpisodeRow(session: AppSession, detail: WorkDetail, ep: Episode, state: DetailState, ext: ExternalEpisode? = null) {
     val scope = rememberCoroutineScope()
     val theme = LocalMediaTheme.current
-    val thumb by session.artwork.rememberArtwork(ep.thumbnailPath)
+    val thumb by rememberCover(session, MediaType.SERIES, "", ep.thumbnailPath).let { c -> androidx.compose.runtime.derivedStateOf { c.value.bitmap } }
+    val extThumb by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, ext?.imageUrl, ep.thumbnailPath) {
+        if (ep.thumbnailPath == null && ext?.imageUrl != null && session.config.externalMetadata) value = session.artwork.load(ext.imageUrl)
+    }
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val shape = RoundedCornerShape(Tokens.radiusInput)
@@ -480,7 +512,7 @@ private fun EpisodeRow(session: AppSession, detail: WorkDetail, ep: Episode, sta
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(Modifier.width(152.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp))) {
-            Artwork(thumb, MediaType.SERIES, Modifier.fillMaxSize(), glyphSize = 22.dp)
+            Artwork(thumb ?: extThumb, MediaType.SERIES, Modifier.fillMaxSize(), glyphSize = 22.dp)
             if (hovered && ep.isPlayable) Box(Modifier.fillMaxSize().background(Tokens.bgBase.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
                 Box(Modifier.size(40.dp).background(Brush.linearGradient(listOf(theme.ctaGradientStart, theme.accentGradientEnd)), CircleShape), contentAlignment = Alignment.Center) {
                     Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = theme.onAccent, modifier = Modifier.size(22.dp))
@@ -495,7 +527,8 @@ private fun EpisodeRow(session: AppSession, detail: WorkDetail, ep: Episode, sta
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ep.code?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = theme.accentGradientEnd) }
-                Text(ep.title ?: ep.asset.filename ?: ep.asset.id, style = MaterialTheme.typography.titleMedium, color = if (ep.isPlayable) Tokens.textPrimary else Tokens.textDisabled, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(ep.title ?: ext?.name ?: ep.asset.filename ?: ep.asset.id, style = MaterialTheme.typography.titleMedium, color = if (ep.isPlayable) Tokens.textPrimary else Tokens.textDisabled, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                ext?.airdate?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Tokens.textDisabled) }
                 if (isContinue) Text("continue · ${state.continueEntry?.progressLabel}", style = MaterialTheme.typography.labelSmall, color = theme.accentGradientEnd)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -507,6 +540,7 @@ private fun EpisodeRow(session: AppSession, detail: WorkDetail, ep: Episode, sta
                 }
                 if (!ep.isPlayable) Text("file missing since ${ep.asset.missingSince?.take(10)}", style = MaterialTheme.typography.labelSmall, color = Tokens.danger)
             }
+            ext?.summary?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted, maxLines = 2, overflow = TextOverflow.Ellipsis) }
         }
         if (ep.isPlayable) {
             IconButtonRound(Icons.Rounded.Cast, "Play ${ep.label} on a renderer", { toggleCast(session, state, ep.asset.id, scope) }, size = 34.dp)
@@ -517,21 +551,26 @@ private fun EpisodeRow(session: AppSession, detail: WorkDetail, ep: Episode, sta
 
 /** A numbered gap in a season: nothing held, and the one honest action — ask the indexers. */
 @Composable
-private fun MissingEpisodeRow(session: AppSession, season: Season, number: Int, wants: List<DesiredItem>, state: DetailState) {
+private fun MissingEpisodeRow(session: AppSession, season: Season, number: Int, wants: List<DesiredItem>, state: DetailState, ext: ExternalEpisode? = null) {
     val scope = rememberCoroutineScope()
     val code = "S%02dE%02d".format(season.number ?: 0, number)
+    val extThumb by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, ext?.imageUrl) {
+        if (ext?.imageUrl != null && session.config.externalMetadata) value = session.artwork.load(ext.imageUrl)
+    }
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(Tokens.radiusInput)).border(Tokens.hairline, Tokens.border.copy(alpha = 0.6f), RoundedCornerShape(Tokens.radiusInput)).padding(8.dp)
             .semantics { contentDescription = "$code not held" },
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(Modifier.width(152.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(Tokens.surface1), contentAlignment = Alignment.Center) {
-            Text("not held", style = MaterialTheme.typography.labelSmall, color = Tokens.textDisabled)
+            if (extThumb != null) androidx.compose.foundation.Image(extThumb!!, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize().alpha(0.45f))
+            Text("not held", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(code, style = MaterialTheme.typography.labelMedium, color = Tokens.textDisabled)
-                Text("Not held", style = MaterialTheme.typography.titleMedium, color = Tokens.textDisabled)
+                Text(ext?.name ?: "Not held", style = MaterialTheme.typography.titleMedium, color = Tokens.textDisabled)
+                ext?.airdate?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Tokens.textDisabled) }
             }
             Text(if (wants.isEmpty()) "Want this series and heyarr will look for it." else "Wanted — heyarr searches on its schedule; ask now to jump the queue.", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
         }

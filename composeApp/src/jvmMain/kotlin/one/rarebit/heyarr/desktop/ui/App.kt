@@ -102,6 +102,7 @@ fun App(
     downloader: BlobDownloader = JdkBlobDownloader(),
     initialRoute: Route = Route.Home,
     artworkLoader: ArtworkLoader? = null,
+    externalMetadata: one.rarebit.heyarr.desktop.state.ExternalMetadata? = null,
     /** Preview/test seam: a query typed into search on first composition. */
     initialQuery: String? = null,
     /** Preview/test seam: open the connection sheet at once. */
@@ -110,7 +111,7 @@ fun App(
     onFullscreen: (Boolean) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
-    val session = remember { AppSession(settings, transport, player, OpenExternally(downloader, opener), scope, artworkLoader) }
+    val session = remember { AppSession(settings, transport, player, OpenExternally(downloader, opener), scope, artworkLoader, externalMetadata) }
     val nav = remember { Nav(initialRoute) }
     val search = remember { SearchController(scope, { session.api }, session::noteTransportFailure) }
     val home = remember { HomeState() }

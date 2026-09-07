@@ -59,7 +59,7 @@ private fun render(file: File, width: Int, height: Int, route: Route, query: Str
         scene.setContent {
             App(
                 settings = settings, transport = transport, player = NoPlayer, opener = NoOpener, downloader = NoDownloader,
-                initialRoute = route, artworkLoader = art, initialQuery = query, initialConnectionSheet = connection,
+                initialRoute = route, artworkLoader = art, externalMetadata = one.rarebit.heyarr.desktop.state.ExternalMetadata.NONE, initialQuery = query, initialConnectionSheet = connection,
             )
         }
         // Let effects (fixture fetches on IO) land: render, wait, re-render until quiet.

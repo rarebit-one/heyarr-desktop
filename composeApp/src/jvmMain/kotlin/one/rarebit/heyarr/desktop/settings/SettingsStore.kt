@@ -23,6 +23,12 @@ data class DesktopConfig(
      * (Hyprland, sway) reports 1x and ignores `sun.java2d.uiScale` for Compose.
      */
     val uiScale: Float? = null,
+    /**
+     * Fetch cover art and synopses from public, keyless sources (TVmaze, Wikipedia,
+     * Open Library, iTunes, Cover Art Archive, a feed's own image) when the node holds
+     * none. Titles are sent to those services; off means nothing leaves but the node's URL.
+     */
+    val externalMetadata: Boolean = true,
 ) {
     /** The scale to render at: the saved value, else the environment, else 1x. */
     fun effectiveUiScale(env: (String) -> String? = System::getenv): Float =
@@ -66,6 +72,7 @@ class FileSettingsStore(
                 ?: DesktopConfig.DEFAULT_BASE_URL,
             bearerToken = JsonScan.stringField(obj, "bearer_token").orEmpty(),
             uiScale = JsonScan.stringField(obj, "ui_scale")?.toFloatOrNull()?.takeIf { it in 0.5f..4f },
+            externalMetadata = JsonScan.boolField(obj, "external_metadata") ?: true,
         )
     }
 
@@ -76,6 +83,7 @@ class FileSettingsStore(
             append("  \"base_url\": \"").append(escape(config.baseUrl)).append("\",\n")
             append("  \"bearer_token\": \"").append(escape(config.bearerToken)).append("\"")
             config.uiScale?.let { append(",\n  \"ui_scale\": \"").append(it.toString()).append("\"") }
+            append(",\n  \"external_metadata\": ").append(if (config.externalMetadata) "true" else "false")
             append("\n}\n")
         }
         file.writeText(json)

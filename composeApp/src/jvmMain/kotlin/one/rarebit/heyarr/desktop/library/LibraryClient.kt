@@ -53,7 +53,7 @@ class LibraryClient(
 
         /** `GET /works?limit=200[&cursor=…]` — one page of the list. */
         fun worksUrl(baseUrl: String, cursor: String?): String {
-            val base = worksUrl(baseUrl) + "?limit=" + PAGE_LIMIT
+            val base = worksUrl(baseUrl) + "?limit=" + PAGE_LIMIT + "&include=artwork"
             return if (cursor.isNullOrBlank()) base else base + "&cursor=" + URLEncoder.encode(cursor, "UTF-8")
         }
 

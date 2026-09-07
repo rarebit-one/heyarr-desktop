@@ -43,6 +43,7 @@ object WorksJson {
             sortTitle = JsonScan.stringField(obj, "sort_title"),
             createdAt = JsonScan.stringField(obj, "created_at"),
             updatedAt = JsonScan.stringField(obj, "updated_at"),
+            artworkPath = JsonScan.objectAt(obj, "artwork")?.let { JsonScan.stringField(it, "content_url") },
         )
     }
 }

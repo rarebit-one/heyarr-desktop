@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import one.rarebit.heyarr.desktop.ui.components.rememberCover
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -116,13 +117,15 @@ fun LibraryScreen(session: AppSession, state: LibraryState, onOpen: (Route) -> U
             ) {
                 items(filtered, key = { it.id }) { w ->
                     val type = MediaType.from(w.kind)
-                    MediaCard(w.title, type, onOpen = { onOpen(Route.Detail(w.id, type, w.title, from = "Library")) }, subtitle = w.artist ?: w.author, meta = listOf(w.year?.toString()), status = session.index.statusOf(w.id), onWant = { onWant(w.id, w.title) }, width = Tokens.posterWidth)
+                    val cover by rememberCover(session, type, w.title, w.artworkPath, w.year, w.artist ?: w.author)
+                    MediaCard(w.title, type, onOpen = { onOpen(Route.Detail(w.id, type, w.title, from = "Library")) }, subtitle = w.artist ?: w.author, meta = listOf(w.year?.toString()), artwork = cover.bitmap, status = session.index.statusOf(w.id), onWant = { onWant(w.id, w.title) }, width = Tokens.posterWidth)
                 }
             }
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 32.dp), modifier = Modifier.fillMaxSize()) {
                 items(filtered, key = { it.id }) { w ->
                     val type = MediaType.from(w.kind)
-                    MediaRow(w.title, type, onOpen = { onOpen(Route.Detail(w.id, type, w.title, from = "Library")) }, subtitle = w.artist ?: w.author, meta = listOf(w.year?.toString(), w.recency?.take(10)), status = session.index.statusOf(w.id))
+                    val cover by rememberCover(session, type, w.title, w.artworkPath, w.year, w.artist ?: w.author)
+                    MediaRow(w.title, type, onOpen = { onOpen(Route.Detail(w.id, type, w.title, from = "Library")) }, subtitle = w.artist ?: w.author, meta = listOf(w.year?.toString(), w.recency?.take(10)), artwork = cover.bitmap, status = session.index.statusOf(w.id))
                 }
             }
         }

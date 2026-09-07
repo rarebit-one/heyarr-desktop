@@ -51,6 +51,7 @@ class AppSession(
     val openExternally: OpenExternally,
     private val scope: CoroutineScope,
     artworkLoader: ArtworkLoader? = null,
+    externalMetadata: ExternalMetadata? = null,
 ) {
     var config: DesktopConfig by mutableStateOf(settings.load())
         private set
@@ -62,6 +63,7 @@ class AppSession(
     }
 
     val artwork: ArtworkLoader = artworkLoader ?: ArtworkLoader({ config.baseUrl }, { config.bearerToken.trim() })
+    val external: ExternalMetadata = externalMetadata ?: ExternalMetadata(enabled = { config.externalMetadata })
     val recent = RecentSearches(RecentSearches.defaultFile())
 
     var connection: Connection by mutableStateOf(if (config.bearerToken.isBlank()) Connection.UNCONFIGURED else Connection.UNKNOWN)

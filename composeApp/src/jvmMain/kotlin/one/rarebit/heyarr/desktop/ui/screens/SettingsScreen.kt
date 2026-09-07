@@ -187,7 +187,9 @@ private fun AppearancePanel(session: AppSession) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip("Media-adaptive accents", ap.adaptiveAccents, { session.appearance = ap.copy(adaptiveAccents = !ap.adaptiveAccents) })
             FilterChip("Reduce motion", ap.reduceMotion, { session.appearance = ap.copy(reduceMotion = !ap.reduceMotion) })
+            FilterChip("Public cover art & synopses", session.config.externalMetadata, { session.save(session.config.copy(externalMetadata = !session.config.externalMetadata)) })
         }
+        Text("Where the node holds no artwork, covers and synopses come from keyless public sources — TVmaze (series, with episode lists), Wikipedia (films), Open Library (books), Apple Podcasts, Cover Art Archive (music) and a feed's own image or site icon. Titles are sent to those services; each answer is cached for a week under ~/.cache/heyarr-desktop/meta. Everything external is labelled as such.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
         Text("The accent follows the media in focus: emerald for film, violet for series, amber for books, teal for audiobooks, magenta for podcasts, rose for music. Surfaces and text never change.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (t in listOf(MediaType.MOVIE, MediaType.SERIES, MediaType.BOOK, MediaType.AUDIOBOOK, MediaType.PODCAST, MediaType.MUSIC)) MediaScope(t) { PrimaryButton(MediaThemes.of(t).ctaLabel, {}, compact = true) }

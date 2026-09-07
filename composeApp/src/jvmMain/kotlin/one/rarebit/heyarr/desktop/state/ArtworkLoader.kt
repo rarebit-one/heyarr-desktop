@@ -71,12 +71,15 @@ class ArtworkLoader(
 
     private fun fetch(contentPath: String): ByteArray? = runCatching {
         fetcher?.let { return it(contentPath) }
+        // An absolute URL is external art (a public cover source): no credential leaves this app for it.
+        val external = contentPath.startsWith("http://") || contentPath.startsWith("https://")
         val base = baseUrl().trimEnd('/')
-        if (base.isEmpty()) return null
-        val req = HttpRequest.newBuilder(URI.create(base + contentPath))
+        if (!external && base.isEmpty()) return null
+        val builder = HttpRequest.newBuilder(URI.create(if (external) contentPath else base + contentPath))
             .timeout(Duration.ofSeconds(20))
-            .header("Authorization", "Bearer " + token())
-            .GET().build()
+            .header("User-Agent", ExternalMetadata.USER_AGENT)
+        if (!external) builder.header("Authorization", "Bearer " + token())
+        val req = builder.GET().build()
         val resp = client.send(req, HttpResponse.BodyHandlers.ofByteArray())
         if (resp.statusCode() == 200) resp.body() else null
     }.getOrNull()

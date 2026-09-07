@@ -62,7 +62,7 @@ import one.rarebit.heyarr.desktop.state.SearchGrouping
 import one.rarebit.heyarr.desktop.state.SearchRow
 import one.rarebit.heyarr.desktop.state.SearchSection
 import one.rarebit.heyarr.desktop.state.Segment
-import one.rarebit.heyarr.desktop.state.rememberArtwork
+import one.rarebit.heyarr.desktop.ui.components.rememberCover
 import one.rarebit.heyarr.desktop.theme.LocalMediaTheme
 import one.rarebit.heyarr.desktop.theme.MediaScope
 import one.rarebit.heyarr.desktop.theme.MediaType
@@ -159,12 +159,12 @@ private fun ResultRow(session: AppSession, row: SearchRow, selected: Boolean, on
     when (row) {
         is SearchRow.WorkRow -> {
             val hit = row.hit
-            val art by session.artwork.rememberArtwork(hit.artworkPath)
+            val cover by rememberCover(session, row.type, hit.title, hit.artworkPath, hit.year, hit.creator)
             val status = session.index.statusOf(hit.workId)
             MediaRow(
                 title = hit.title, type = row.type, onOpen = onOpen, subtitle = hit.creator,
                 meta = listOf(hit.year?.toString(), hit.attributes["runtime"], hit.attributes["album"], hit.attributes["series"]),
-                artwork = art, status = status, selected = selected,
+                artwork = cover.bitmap, status = status, selected = selected,
                 trailing = {
                     if (status == LibraryStatus.NOT_TRACKED) PrimaryButton("Want", { onWant(hit.workId, hit.title) }, icon = Icons.Rounded.Add, compact = true, contentDescription = "Want ${hit.title}")
                     else SecondaryButton("Open", onOpen, compact = true)
@@ -176,11 +176,14 @@ private fun ResultRow(session: AppSession, row: SearchRow, selected: Boolean, on
             meta = listOf(row.hit.kind, if (row.hit.blobHash != null) "file held" else "no file"),
             status = if (row.hit.blobHash != null) LibraryStatus.IN_LIBRARY else null, selected = selected,
         )
-        is SearchRow.SourceRow -> MediaRow(
-            title = row.source.title, type = row.type, onOpen = onOpen, subtitle = row.source.feedRef,
-            meta = listOf(row.source.type, "${row.source.itemsArchived}/${row.source.itemsKnown} archived", row.source.health),
-            status = LibraryStatus.IN_LIBRARY, selected = selected,
-        )
+        is SearchRow.SourceRow -> {
+            val cover by rememberCover(session, row.type, row.source.title, null, feedRef = row.source.feedRef)
+            MediaRow(
+                title = row.source.title, type = row.type, onOpen = onOpen, subtitle = row.source.feedRef,
+                meta = listOf(row.source.type, "${row.source.itemsArchived}/${row.source.itemsKnown} archived", row.source.health),
+                artwork = cover.bitmap, status = LibraryStatus.IN_LIBRARY, selected = selected,
+            )
+        }
     }
 }
 
