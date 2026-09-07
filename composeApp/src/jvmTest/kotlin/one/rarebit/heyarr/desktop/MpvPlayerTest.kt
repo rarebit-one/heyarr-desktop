@@ -81,6 +81,37 @@ class MpvPlayerTest {
     }
 
     @Test
+    fun playAllQueuesEveryUrlUnderOneSharedAuthHeader() {
+        val hashes = listOf(
+            "blake3:" + "a".repeat(64),
+            "blake3:" + "b".repeat(64),
+            "blake3:" + "c".repeat(64),
+        )
+        val captured = ArrayList<List<String>>()
+        val player = MpvPlayer(command = "mpv", available = { true }, spawn = { captured += it })
+
+        val result = player.playAll("https://h.example", hashes, TOKEN)
+
+        assertEquals(PlayResult.Launched, result)
+        val argv = captured.single()
+        // One shared header, then the three ordered URLs as trailing positional args.
+        assertEquals("mpv", argv[0])
+        assertEquals("--force-window=yes", argv[1])
+        assertEquals("--http-header-fields=Authorization: Bearer $TOKEN", argv[2])
+        assertEquals(hashes.map { "https://h.example/api/v1/blobs/$it/content" }, argv.drop(3))
+        assertEquals(1, argv.count { it.startsWith("--http-header-fields=") }) // exactly one auth header
+    }
+
+    @Test
+    fun playAllEmptyIsFailedNotSpawned() {
+        var spawned = false
+        val player = MpvPlayer(available = { true }, spawn = { spawned = true })
+        val result = player.playAll("https://h.example", emptyList(), TOKEN)
+        assertTrue(result is PlayResult.Failed)
+        assertTrue(!spawned)
+    }
+
+    @Test
     fun badHashFailsBeforeSpawn() {
         var spawned = false
         val player = MpvPlayer(available = { true }, spawn = { spawned = true })

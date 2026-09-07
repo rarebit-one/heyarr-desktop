@@ -36,11 +36,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import one.rarebit.heyarr.desktop.auth.Credential
+import one.rarebit.heyarr.desktop.books.BooksSection
+import one.rarebit.heyarr.desktop.feeds.FeedsSection
 import one.rarebit.heyarr.desktop.library.LibraryClient
 import one.rarebit.heyarr.desktop.library.Work
 import one.rarebit.heyarr.desktop.library.WorkDetail
 import one.rarebit.heyarr.desktop.library.WorkDetailClient
+import one.rarebit.heyarr.desktop.music.MusicSection
 import one.rarebit.heyarr.desktop.net.HttpTransport
+import one.rarebit.heyarr.desktop.open.BlobDownloader
+import one.rarebit.heyarr.desktop.open.ExternalOpener
+import one.rarebit.heyarr.desktop.open.JdkBlobDownloader
+import one.rarebit.heyarr.desktop.open.OpenExternally
+import one.rarebit.heyarr.desktop.open.XdgOpen
 import one.rarebit.heyarr.desktop.playback.MpvPlayer
 import one.rarebit.heyarr.desktop.playback.PlayResult
 import one.rarebit.heyarr.desktop.playback.Player
@@ -48,24 +56,40 @@ import one.rarebit.heyarr.desktop.settings.DesktopConfig
 import one.rarebit.heyarr.desktop.settings.SettingsStore
 
 /**
- * The whole v1 UI: two tabs, Settings and Library. State is held in plain Compose
- * `mutableStateOf` (a ViewModel layer comes with the shared module); network work runs
- * on `Dispatchers.IO` — the blocking [HttpTransport] contract.
+ * The whole v1 UI: five sections — Library, Music, Books, Feeds, Settings — as a top tab
+ * row. State is held in plain Compose `mutableStateOf` (a ViewModel layer comes with the
+ * shared module); network work runs on `Dispatchers.IO` — the blocking [HttpTransport]
+ * contract.
  *
- * The Library tab is a master/detail: the list of works, and — when a row is clicked —
- * a detail pane that resolves the work's playable file (`GET /works/{id}`) and hands it
- * to the [player] (mpv) on **Play**.
+ * Library is a master/detail: the list of works, and — when a row is clicked — a detail
+ * pane that resolves the work's playable file (`GET /works/{id}`) and hands it to the
+ * [player] (mpv) on **Play**. Music/Books/Feeds are self-contained section composables
+ * sharing a [SectionEnv] (built from the saved config + the injected seams): [player] for
+ * audio, and an [OpenExternally] (a [BlobDownloader] + an [ExternalOpener]) for
+ * downloading a book/article blob to a temp file and opening it with `xdg-open`.
  */
 @Composable
 fun App(
     settings: SettingsStore,
     transport: HttpTransport,
     player: Player = MpvPlayer(),
+    opener: ExternalOpener = XdgOpen(),
+    downloader: BlobDownloader = JdkBlobDownloader(),
 ) {
     val scope = rememberCoroutineScope()
 
     var config by remember { mutableStateOf(settings.load()) }
     var selectedTab by remember { mutableStateOf(0) }
+
+    val env = remember(config, transport, player, opener, downloader) {
+        SectionEnv(
+            baseUrl = config.baseUrl,
+            token = config.bearerToken.trim(),
+            transport = transport,
+            player = player,
+            openExternally = OpenExternally(downloader, opener),
+        )
+    }
 
     // Library state.
     var works by remember { mutableStateOf<List<Work>>(emptyList()) }
@@ -83,7 +107,7 @@ fun App(
         val token = config.bearerToken.trim()
         if (token.isEmpty()) {
             status = "Set a bearer token in Settings first."
-            selectedTab = 0
+            selectedTab = 4
             return
         }
         loading = true
@@ -150,23 +174,18 @@ fun App(
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {
                 PrimaryTabRow(selectedTabIndex = selectedTab) {
-                    Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Settings") })
                     Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1; if (works.isEmpty()) refreshLibrary() },
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0; if (works.isEmpty()) refreshLibrary() },
                         text = { Text("Library") },
                     )
+                    Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Music") })
+                    Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text("Books") })
+                    Tab(selected = selectedTab == 3, onClick = { selectedTab = 3 }, text = { Text("Feeds") })
+                    Tab(selected = selectedTab == 4, onClick = { selectedTab = 4 }, text = { Text("Settings") })
                 }
                 when (selectedTab) {
-                    0 -> SettingsScreen(
-                        config = config,
-                        onSave = { updated ->
-                            settings.save(updated)
-                            config = updated
-                            status = "Saved."
-                        },
-                    )
-                    else -> {
+                    0 -> {
                         val current = selected
                         if (current == null) {
                             LibraryScreen(
@@ -188,6 +207,17 @@ fun App(
                             )
                         }
                     }
+                    1 -> MusicSection(env)
+                    2 -> BooksSection(env)
+                    3 -> FeedsSection(env)
+                    else -> SettingsScreen(
+                        config = config,
+                        onSave = { updated ->
+                            settings.save(updated)
+                            config = updated
+                            status = "Saved."
+                        },
+                    )
                 }
             }
         }

@@ -15,6 +15,17 @@ interface Player {
      * it launches the player process and returns — the caller runs it off the UI thread.
      */
     fun play(baseUrl: String, blobHash: String, token: String): PlayResult
+
+    /**
+     * Queue an ordered list of blobs as a single playlist (e.g. a whole album), all
+     * authenticated with the one [token]. The default plays only the first (enough for a
+     * backend that cannot queue); [MpvPlayer] overrides it to hand mpv the whole ordered
+     * list. An empty list is a no-op failure.
+     */
+    fun playAll(baseUrl: String, blobHashes: List<String>, token: String): PlayResult {
+        val first = blobHashes.firstOrNull() ?: return PlayResult.Failed("Nothing to play.")
+        return play(baseUrl, first, token)
+    }
 }
 
 /** The outcome of a [Player.play] — a value the UI renders, never a thrown exception. */
