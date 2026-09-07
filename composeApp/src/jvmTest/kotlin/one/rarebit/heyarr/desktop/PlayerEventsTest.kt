@@ -42,3 +42,20 @@ class PlayerEventsTest {
         assertEquals(PlayerState(), PlayerEvents.apply(PlayerState(), "not json"))
     }
 }
+
+class LanguageNameTest {
+    @Test fun isoCodesBecomeNames() {
+        assertEquals("English", one.rarebit.heyarr.desktop.ui.screens.languageName("eng"))
+        assertEquals("English", one.rarebit.heyarr.desktop.ui.screens.languageName("en"))
+        assertEquals("Spanish", one.rarebit.heyarr.desktop.ui.screens.languageName("spa"))
+        assertNull(one.rarebit.heyarr.desktop.ui.screens.languageName("und"))
+        assertNull(one.rarebit.heyarr.desktop.ui.screens.languageName(null))
+    }
+
+    @Test fun wikipediaYearGuard() {
+        assertTrue(one.rarebit.heyarr.desktop.state.ExternalParsers.yearAgrees("Yellowstone is a 2018 drama series.", 2018))
+        assertFalse(one.rarebit.heyarr.desktop.state.ExternalParsers.yearAgrees("Yellowstone is a 1936 American Western film.", 2018))
+        assertTrue(one.rarebit.heyarr.desktop.state.ExternalParsers.yearAgrees("No year here.", 2018))
+        assertTrue(one.rarebit.heyarr.desktop.state.ExternalParsers.yearAgrees("Released in 1936.", null))
+    }
+}

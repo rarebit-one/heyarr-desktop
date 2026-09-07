@@ -53,7 +53,15 @@ data class PlayerState(
  */
 class EmbeddedPlayer(
     private val command: String = "mpv",
-    private val spawn: (List<String>) -> Process = { argv -> ProcessBuilder(argv).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start() },
+    private val spawn: (List<String>) -> Process = { argv ->
+        ProcessBuilder(argv).apply {
+            // --wid is an X11 embed. With WAYLAND_DISPLAY in its environment mpv picks its
+            // Wayland backend, ignores the wid and opens a window of its own (verified on
+            // Hyprland): the JVM is an XWayland client, so mpv must be one too.
+            environment().remove("WAYLAND_DISPLAY")
+            redirectErrorStream(true); redirectOutput(ProcessBuilder.Redirect.DISCARD)
+        }.start()
+    },
 ) {
     var state: PlayerState by mutableStateOf(PlayerState())
         private set
@@ -66,25 +74,37 @@ class EmbeddedPlayer(
 
     val isRunning: Boolean get() = process?.isAlive == true && channel?.isOpen == true
 
-    /** Spawn mpv into [wid] and load [url]. Returns null on success, else a UI-safe reason. */
-    fun start(wid: Long, url: String, token: String, title: String): String? {
+    /** True when mpv runs in its own window rather than inside the app. */
+    var poppedOut: Boolean = false
+        private set
+    private var lastUrl: String? = null
+    private var lastToken: String? = null
+    private var lastTitle: String? = null
+
+    /**
+     * Spawn mpv and load [url]. With a [wid] mpv renders into that X11 window (the
+     * app's canvas); with none it opens its own window — the pop-out — and keeps its
+     * OSC so that window is usable on its own, while the app's transport still drives
+     * it over the same socket. Returns null on success, else a UI-safe reason.
+     */
+    fun start(wid: Long?, url: String, token: String, title: String): String? {
         close()
         closed = false
+        poppedOut = wid == null
+        lastUrl = url; lastToken = token; lastTitle = title
         val sock = File(System.getProperty("java.io.tmpdir"), "heyarr-mpv-${ProcessHandle.current().pid()}-${System.nanoTime()}.sock")
         socketPath = sock
-        val argv = listOf(
-            command,
-            "--wid=$wid",
-            "--input-ipc-server=${sock.absolutePath}",
-            "--idle=yes", "--force-window=yes", "--keep-open=yes",
-            "--osc=no", "--osd-level=0", "--osd-bar=no",
-            "--input-default-bindings=no", "--input-vo-keyboard=no", "--cursor-autohide=no",
-            "--no-terminal", "--msg-level=all=error",
-            "--hwdec=auto",
-            "--http-header-fields=Authorization: Bearer $token",
-            "--title=$title",
-            url,
-        )
+        val argv = buildList {
+            add(command)
+            if (wid != null) add("--wid=$wid")
+            add("--input-ipc-server=${sock.absolutePath}")
+            addAll(listOf("--idle=yes", "--force-window=yes", "--keep-open=yes", "--cursor-autohide=no", "--no-terminal", "--msg-level=all=error"))
+            if (wid != null) addAll(listOf("--osc=no", "--osd-level=0", "--osd-bar=no", "--input-default-bindings=no", "--input-vo-keyboard=no"))
+            else addAll(listOf("--osc=yes", "--input-default-bindings=yes", "--geometry=60%"))
+            add("--http-header-fields=Authorization: Bearer $token")
+            add("--title=$title")
+            add(url)
+        }
         process = try { spawn(argv) } catch (e: IOException) { return "mpv could not be started — is it installed and on PATH?" }
         // The socket appears once mpv is up; give it a few seconds.
         val deadline = System.currentTimeMillis() + 4000
@@ -104,9 +124,31 @@ class EmbeddedPlayer(
 
     /** Replace what is playing (the token was given at start; mpv keeps its header option). */
     fun load(url: String, title: String) {
+        lastUrl = url; lastTitle = title
         state = state.copy(loaded = false, position = 0.0, duration = 0.0, eof = false, error = null, title = title, subtitles = emptyList(), audio = emptyList())
         send("loadfile", url, "replace")
         send("set_property", "pause", false)
+    }
+
+    /**
+     * Move playback between the app's surface and a window of mpv's own, keeping the
+     * position, pause state and volume. mpv cannot re-parent a live window, so this
+     * is a restart with a seek — the file is streamed, so it resumes in a moment.
+     */
+    fun switchWindow(wid: Long?): String? {
+        val url = lastUrl ?: return "nothing is playing"
+        val token = lastToken ?: return "nothing is playing"
+        val title = lastTitle ?: ""
+        val resume = state.copy()
+        val err = start(wid, url, token, title) ?: run {
+            if (resume.position > 1.0) send("set_property", "start", resume.position.toString())
+            send("set_property", "volume", resume.volume)
+            send("set_property", "mute", resume.muted)
+            if (resume.position > 1.0) send("seek", resume.position, "absolute")
+            send("set_property", "pause", resume.paused)
+            null
+        }
+        return err
     }
 
     fun togglePause() = send("cycle", "pause")

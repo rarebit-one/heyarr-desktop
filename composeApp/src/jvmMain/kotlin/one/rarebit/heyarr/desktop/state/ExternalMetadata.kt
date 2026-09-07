@@ -98,7 +98,10 @@ class ExternalMetadata(
         for (t in titles) {
             val body = get("https://en.wikipedia.org/api/rest_v1/page/summary/${enc(t.replace(' ', '_'))}") ?: continue
             val meta = ExternalParsers.wikipedia(body) ?: continue
-            if (!meta.isEmpty) return meta
+            if (meta.isEmpty) continue
+            // A film page that names a different year is a different film ("Yellowstone (1936 film)" for a 2018 work).
+            if (!ExternalParsers.yearAgrees(meta.synopsis, key.year)) continue
+            return meta
         }
         return null
     }
@@ -228,9 +231,17 @@ object ExternalParsers {
     fun feedDescription(xml: String): String? =
         (RE_DESCRIPTION.find(xml)?.groupValues?.get(1) ?: RE_SUBTITLE.find(xml)?.groupValues?.get(1))?.let { stripHtml(it) }?.takeIf { it.isNotBlank() }?.take(400)
 
+    /** True unless the text's first four-digit year sits more than a year from [year]. */
+    fun yearAgrees(text: String?, year: Int?): Boolean {
+        if (year == null || text == null) return true
+        val found = RE_YEAR_IN_TEXT.find(text)?.value?.toIntOrNull() ?: return true
+        return kotlin.math.abs(found - year) <= 1
+    }
+
     fun stripHtml(s: String): String = s.replace(RE_TAGS, "").replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">").replace(RE_WS, " ").trim()
 
     private val RE_TAGS = Regex("<!\\[CDATA\\[|]]>|<[^>]+>")
+    private val RE_YEAR_IN_TEXT = Regex("""\b(19|20)\d{2}\b""")
     private val RE_WS = Regex("\\s+")
     private val RE_ITUNES_IMAGE = Regex("""<itunes:image[^>]*href="([^"]+)"""")
     private val RE_IMAGE_URL = Regex("""<image>\s*(?:<[^>]+>[^<]*</[^>]+>\s*)*?<url>\s*([^<]+?)\s*</url>""", RegexOption.DOT_MATCHES_ALL)

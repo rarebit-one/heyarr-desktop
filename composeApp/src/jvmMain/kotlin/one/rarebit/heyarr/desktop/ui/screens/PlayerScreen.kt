@@ -78,6 +78,7 @@ import one.rarebit.heyarr.desktop.theme.Tokens
 import one.rarebit.heyarr.desktop.ui.Route
 import one.rarebit.heyarr.desktop.ui.components.Artwork
 import one.rarebit.heyarr.desktop.ui.components.FilterChip
+import one.rarebit.heyarr.desktop.ui.components.focusRing
 import one.rarebit.heyarr.desktop.ui.components.GhostButton
 import one.rarebit.heyarr.desktop.ui.components.IconButtonRound
 import one.rarebit.heyarr.desktop.ui.components.Notice
@@ -96,6 +97,8 @@ class PlayerScreenState(val route: Route.Player) {
     var renderers by mutableStateOf<List<Renderer>?>(null)
     var castOpen by mutableStateOf(false)
     var controlsVisible by mutableStateOf(true)
+    var popout by mutableStateOf(false)
+    var tracksOpen by mutableStateOf(false)
 }
 
 /** The keys the player answers to — one table for the Compose window and the AWT canvas alike. */
@@ -173,13 +176,16 @@ fun PlayerScreen(session: AppSession, state: PlayerScreenState, fullscreen: Bool
                     Text(route.title, style = MaterialTheme.typography.titleMedium, color = Tokens.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     route.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted, maxLines = 1) }
                 }
-                GhostButton("Open in mpv window", {
+                GhostButton(if (state.popout) "Pop back in" else "Pop out", {
                     scope.launch {
-                        p.pause()
-                        val r = session.io { session.player.play(session.config.baseUrl, route.blobHash, session.config.bearerToken.trim()) }.getOrNull()
-                        if (r is PlayResult.Failed) session.toast(Toast.Kind.ERROR, "Couldn't open mpv", r.message)
+                        if (state.popout) { state.popout = false; state.started = false } // the surface re-creates and re-embeds
+                        else {
+                            state.popout = true
+                            val err = session.io { p.switchWindow(null) }.getOrNull()
+                            if (err != null) session.toast(Toast.Kind.ERROR, "Couldn't pop out", err)
+                        }
                     }
-                }, icon = Icons.Rounded.OpenInNew)
+                }, icon = if (state.popout) Icons.Rounded.Fullscreen else Icons.Rounded.OpenInNew)
                 IconButtonRound(Icons.Rounded.Cast, "Play on a renderer", { state.castOpen = !state.castOpen; if (state.renderers == null) scope.launch { session.api?.let { a -> session.io { a.renderers() }.onSuccess { state.renderers = it } } } })
                 IconButtonRound(Icons.Rounded.Fullscreen, "Fullscreen (F)", ::toggleFullscreen, filled = true)
             }
@@ -188,12 +194,17 @@ fun PlayerScreen(session: AppSession, state: PlayerScreenState, fullscreen: Bool
             // ── the picture ─────────────────────────────────────────────────────
             val videoModifier = if (fullscreen) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth().padding(horizontal = 24.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(Tokens.radiusCard))
             Box(videoModifier.background(Color.Black)) {
-                if (headless) {
-                    val art by session.artwork.rememberArtwork(null)
-                    Artwork(art, type, Modifier.fillMaxSize(), glyphSize = 64.dp)
-                    Text("mpv renders here", style = MaterialTheme.typography.labelMedium, color = Tokens.textMuted, modifier = Modifier.align(Alignment.Center).padding(top = 90.dp))
-                } else {
-                    VideoSurface(session, state, onToggleFullscreen = ::toggleFullscreen, onBack = onBack, fullscreen = fullscreen)
+                when {
+                    headless -> {
+                        Artwork(null, type, Modifier.fillMaxSize(), glyphSize = 64.dp)
+                        Text("mpv renders here", style = MaterialTheme.typography.labelMedium, color = Tokens.textMuted, modifier = Modifier.align(Alignment.Center).padding(top = 90.dp))
+                    }
+                    state.popout -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Rounded.OpenInNew, contentDescription = null, tint = Tokens.textMuted, modifier = Modifier.size(40.dp))
+                        Text("Playing in a separate mpv window", style = MaterialTheme.typography.titleMedium, color = Tokens.textPrimary)
+                        Text("The controls below still drive it; that window has mpv's own controls too.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+                    }
+                    else -> VideoSurface(session, state, onToggleFullscreen = ::toggleFullscreen, onBack = onBack, fullscreen = fullscreen)
                 }
                 if (state.startError != null) Box(Modifier.fillMaxSize().background(Tokens.bgBase.copy(alpha = 0.85f)), contentAlignment = Alignment.Center) {
                     Notice("mpv could not start: ${state.startError}", tone = Tokens.danger, modifier = Modifier.padding(32.dp))
@@ -214,12 +225,7 @@ fun PlayerScreen(session: AppSession, state: PlayerScreenState, fullscreen: Bool
                     if (ps.buffering) Text("buffering…", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
                     if (ps.eof) Text("finished", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
                     Spacer(Modifier.weight(1f))
-                    // Captions
-                    if (ps.subtitles.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Rounded.ClosedCaption, contentDescription = null, tint = Tokens.textMuted, modifier = Modifier.size(16.dp))
-                        FilterChip("Off", ps.subtitleId == null, { p.setSubtitle(null) })
-                        for (t in ps.subtitles) FilterChip(t.label, ps.subtitleId == t.id, { p.setSubtitle(t.id) })
-                    } else Text("no captions in this file", style = MaterialTheme.typography.labelSmall, color = Tokens.textDisabled)
+                    TracksMenu(state, ps)
                     Spacer(Modifier.width(8.dp))
                     IconButtonRound(if (ps.muted || ps.volume <= 0) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp, if (ps.muted) "Unmute (M)" else "Mute (M)", { p.toggleMute() }, size = 32.dp)
                     Slider(
@@ -267,18 +273,97 @@ private fun VideoSurface(session: AppSession, state: PlayerScreenState, onToggle
             })
         }
     }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(state.started) {
         if (state.started) return@LaunchedEffect
         // The window id exists only once the canvas is realised on screen.
         repeat(60) { if (canvas.isDisplayable && canvas.isShowing) return@repeat; delay(50) }
         if (!canvas.isDisplayable) { state.startError = "the video surface never appeared"; return@LaunchedEffect }
         val wid = runCatching { Native.getComponentID(canvas) }.getOrElse { state.startError = "no native window id for the video surface (${it.message})"; return@LaunchedEffect }
-        val err = session.io { state.player.start(wid, HeyarrApi.blobUrl(session.config.baseUrl, route.blobHash), session.config.bearerToken.trim(), route.title + (route.subtitle?.let { " — $it" } ?: "")) }.getOrNull()
+        val resuming = state.player.isRunning
+        val err = session.io {
+            if (resuming) state.player.switchWindow(wid)
+            else state.player.start(wid, HeyarrApi.blobUrl(session.config.baseUrl, route.blobHash), session.config.bearerToken.trim(), route.title + (route.subtitle?.let { " — $it" } ?: ""))
+        }.getOrNull()
         state.started = true
         state.startError = err
-        if (err == null) state.player.play()
+        if (err == null && !resuming) state.player.play()
     }
-    SwingPanel(background = Color.Black, modifier = Modifier.fillMaxSize(), factory = { canvas })
+    // AWT places heavyweight components in its own units (1× here, under XWayland), while the app
+    // lays out at the chosen UI scale. SwingPanel converts with LocalDensity, so hand it AWT's.
+    val awtDensity = remember { androidx.compose.ui.unit.Density(runCatching { java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice.defaultConfiguration.defaultTransform.scaleX.toFloat() }.getOrDefault(1f)) }
+    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides awtDensity) {
+        SwingPanel(background = Color.Black, modifier = Modifier.fillMaxSize(), factory = { canvas })
+    }
+}
+
+/** Captions (and audio, when there is a choice) as a menu: Off, then every track by language name, title and origin. */
+@Composable
+private fun TracksMenu(state: PlayerScreenState, ps: PlayerState) {
+    val theme = LocalMediaTheme.current
+    val current = ps.subtitles.firstOrNull { it.id == ps.subtitleId }
+    val label = when {
+        ps.subtitles.isEmpty() -> "No captions"
+        current == null -> "Captions off"
+        else -> languageName(current.lang) ?: current.title ?: "Captions"
+    }
+    Box {
+        val interaction = remember { MutableInteractionSource() }
+        Row(
+            Modifier.focusRing(interaction, RoundedCornerShape(Tokens.radiusButton)).clip(RoundedCornerShape(Tokens.radiusButton))
+                .background(if (current != null) theme.tint(0.18f) else Tokens.surface2, RoundedCornerShape(Tokens.radiusButton))
+                .border(Tokens.hairline, if (current != null) theme.accent else Tokens.border, RoundedCornerShape(Tokens.radiusButton))
+                .clickable(interactionSource = interaction, indication = null, enabled = ps.subtitles.isNotEmpty() || ps.audio.size > 1) { state.tracksOpen = true }
+                .semantics { contentDescription = "Captions and audio: $label" }
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(Icons.Rounded.ClosedCaption, contentDescription = null, tint = if (current != null) theme.accentGradientEnd else Tokens.textMuted, modifier = Modifier.size(16.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = if (ps.subtitles.isEmpty()) Tokens.textDisabled else Tokens.textPrimary)
+            if (ps.subtitles.size > 1) Text("+${ps.subtitles.size - 1}", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
+        }
+        androidx.compose.material3.DropdownMenu(expanded = state.tracksOpen, onDismissRequest = { state.tracksOpen = false }, modifier = Modifier.background(Tokens.surface3)) {
+            MenuHeader("Captions")
+            MenuRow("Off", selected = ps.subtitleId == null, detail = null) { state.player.setSubtitle(null); state.tracksOpen = false }
+            for (t in ps.subtitles) MenuRow(
+                languageName(t.lang) ?: t.title ?: "Track ${t.id}", selected = ps.subtitleId == t.id,
+                detail = listOfNotNull(t.title?.takeIf { languageName(t.lang) != null }, t.lang?.uppercase(), if (t.external) "sidecar file" else "in the file").joinToString("  ·  "),
+            ) { state.player.setSubtitle(t.id); state.tracksOpen = false }
+            if (ps.audio.size > 1) {
+                MenuHeader("Audio")
+                for (t in ps.audio) MenuRow(languageName(t.lang) ?: t.title ?: "Track ${t.id}", selected = ps.audioId == t.id, detail = listOfNotNull(t.title, t.lang?.uppercase()).joinToString("  ·  ")) { state.player.setAudio(t.id); state.tracksOpen = false }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MenuHeader(text: String) {
+    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = Tokens.textDisabled, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+}
+
+@Composable
+private fun MenuRow(title: String, selected: Boolean, detail: String?, onClick: () -> Unit) {
+    val theme = LocalMediaTheme.current
+    androidx.compose.material3.DropdownMenuItem(
+        text = {
+            Column {
+                Text(title, style = MaterialTheme.typography.bodyMedium, color = if (selected) theme.accentGradientEnd else Tokens.textPrimary)
+                if (!detail.isNullOrBlank()) Text(detail, style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
+            }
+        },
+        onClick = onClick,
+        leadingIcon = { if (selected) Icon(Icons.Rounded.PlayArrow, contentDescription = "selected", tint = theme.accentGradientEnd, modifier = Modifier.size(14.dp)) else Spacer(Modifier.size(14.dp)) },
+    )
+}
+
+/** `eng` / `en` / `spa` → "English" / "Spanish", via the JDK's locale tables; null when unknown. */
+internal fun languageName(code: String?): String? {
+    val c = code?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+    if (c == "und") return null
+    val direct = java.util.Locale.forLanguageTag(c).getDisplayLanguage(java.util.Locale.ENGLISH)
+    if (direct.isNotBlank() && !direct.equals(c, ignoreCase = true)) return direct
+    val byIso3 = java.util.Locale.getAvailableLocales().firstOrNull { runCatching { it.isO3Language }.getOrNull()?.equals(c, ignoreCase = true) == true }
+    return byIso3?.getDisplayLanguage(java.util.Locale.ENGLISH)?.takeIf { it.isNotBlank() }
 }
 
 @Composable
