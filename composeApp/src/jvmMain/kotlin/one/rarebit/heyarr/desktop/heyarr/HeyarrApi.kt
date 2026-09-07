@@ -193,6 +193,14 @@ class HeyarrApi(
         parse = TracksJson::parse, cursor = TracksJson::nextCursor, what = "GET /works/{id}/assets",
     )
 
+    /** `GET /api/v1/consumption/continue` — the node's continue rail: the newest unfinished playback session per work (ADR-0075). */
+    fun continueRail(limit: Int = 20): List<ContinueEntry> =
+        ContinueJson.list(get("$baseUrl/api/v1/consumption/continue?limit=$limit", "GET /consumption/continue"))
+
+    /** `GET /api/v1/followed-sources/{id}/items` — a followed source's archived items (existing feeds client). */
+    fun followedItems(sourceId: String): List<one.rarebit.heyarr.desktop.feeds.FollowedItem> =
+        one.rarebit.heyarr.desktop.feeds.FeedsClient(http, baseUrl, credential).listItems(sourceId)
+
     /** `GET /api/v1/quality-profiles` — the names a want must be measured against. */
     fun qualityProfiles(): List<QualityProfile> = QualityProfileJson.list(get("$baseUrl/api/v1/quality-profiles", "GET /quality-profiles"))
 

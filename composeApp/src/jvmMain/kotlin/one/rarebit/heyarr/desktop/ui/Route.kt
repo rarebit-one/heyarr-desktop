@@ -20,7 +20,7 @@ sealed interface Route {
     data object Settings : Route
 
     /** The adaptive detail template for one work. [typeHint]/[titleHint] paint the screen before the fetch lands. */
-    data class Detail(val workId: String, val typeHint: MediaType = MediaType.UNKNOWN, val titleHint: String? = null, val from: String = "Library") : Route {
+    data class Detail(val workId: String, val typeHint: MediaType = MediaType.UNKNOWN, val titleHint: String? = null, val from: String = "Library", val curate: Boolean = false) : Route {
         override val section: String get() = from
     }
 }

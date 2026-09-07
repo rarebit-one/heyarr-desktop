@@ -30,7 +30,8 @@ fun main(args: Array<String>) {
         "01-home" to Route.Home,
         "02-search-idle" to Route.Search,
         "02-search-results" to Route.Search,
-        "03-detail-series" to Route.Detail(Fixtures.YELLOWSTONE, MediaType.SERIES, "Yellowstone", from = "Home"),
+        "03-detail-series-watch" to Route.Detail(Fixtures.YELLOWSTONE, MediaType.SERIES, "Yellowstone", from = "Home"),
+        "03b-detail-series-curate" to Route.Detail(Fixtures.YELLOWSTONE, MediaType.SERIES, "Yellowstone", from = "Home", curate = true),
         "04-detail-movie-missing" to Route.Detail(Fixtures.SINTEL, MediaType.MOVIE, "Sintel", from = "Missing"),
         "05-detail-book" to Route.Detail("w-piranesi", MediaType.BOOK, "Piranesi", from = "Library"),
         "06-library" to Route.Library,
@@ -38,7 +39,7 @@ fun main(args: Array<String>) {
         "08-now-playing" to Route.NowPlaying,
         "09-settings" to Route.Settings,
     )
-    val sizes = listOf(1280 to 800)
+    val sizes = listOf(1280 to 900)
     for ((name, route) in shots) for ((w, h) in sizes) {
         render(File(out, "$name.png"), w, h, route, query = if (name.endsWith("results")) "dune" else null)
     }

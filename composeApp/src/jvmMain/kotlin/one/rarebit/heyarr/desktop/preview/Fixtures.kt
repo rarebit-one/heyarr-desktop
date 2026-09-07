@@ -126,11 +126,31 @@ object Fixtures {
         return w.dropLast(1) + ""","external_ids":{},"primary_asset":$primary}"""
     }
 
-    fun assets(id: String) = if (id == YELLOWSTONE) """{"items":[
-      {"id":"as-1","edition_id":"e1","blob_hash":"$HASH","filename":"Yellowstone (2018) - S04E02 - Phantom Pain [HDTV-1080p][AC3 5.1][x264].mkv","mime":"video/x-matroska","role":"primary","blob_size":2986000000},
-      {"id":"as-2","edition_id":"e1","blob_hash":"$HASH","filename":"Yellowstone (2018) - S04E03 - All I See Is You [HDTV-1080p].mkv","mime":"video/x-matroska","role":"primary","blob_size":2710000000},
-      {"id":"as-3","edition_id":"e1","blob_hash":"$HASH","filename":"S04E02-thumb.jpg","mime":"image/jpeg","role":"artwork","blob_size":48511}
-    ]}""" else """{"items":[]}"""
+    private val S4 = listOf("Half the Money", "Phantom Pain", "All I See Is You", "Winning or Learning", "Under a Blanket of Red", "I Want to Be Him", "Keep the Wolves Close", "No Kindness for the Coward", "No Such Thing as Fair", "Grass on the Streets and Weeds on the Rooftops")
+    private val S5 = listOf("One Hundred Years Is Nothing", "The Sting of Wisdom", "Tall Drink of Water", "Horses in Heaven", "Watch 'Em Ride Away", "Cigarettes Whiskey a Meadow and You", "The Dream Is Not Me")
+
+    private fun ep(season: Int, n: Int, title: String, held: Boolean): String {
+        val code = "S%02dE%02d".format(season, n)
+        val stem = "Yellowstone (2018) - $code - $title [HDTV-1080p][AC3 5.1][x264]"
+        val label = "Season %02d".format(season)
+        val thumb = """{"id":"th-$code","edition_id":"e$season","blob_hash":"$HASH","filename":"$stem-thumb.jpg","mime":"image/jpeg","role":"artwork","blob_size":48511,"edition_label":"$label"}"""
+        val video = if (held) """,{"id":"as-$code","edition_id":"e$season","blob_hash":"$HASH","filename":"$stem.mp4","mime":"video/mp4","role":"primary","blob_size":${1_300_000_000L + n * 37_000_000L},"edition_label":"$label"}""" else ""
+        val sub = if (held && n == 1) """,{"id":"sub-$code","edition_id":"e$season","blob_hash":"$HASH","filename":"$stem.en.srt","mime":"text/plain","role":"subtitle","blob_size":61234,"edition_label":"$label"}""" else ""
+        return thumb + video + sub
+    }
+
+    fun assets(id: String): String {
+        if (id != YELLOWSTONE) return """{"items":[]}"""
+        val rows = S4.mapIndexed { i, t -> ep(4, i + 1, t, held = true) } +
+            S5.mapIndexed { i, t -> ep(5, i + 1, t, held = i != 4 && i != 5) }
+        return "{\"items\":[" + rows.joinToString(",") + "]}"
+    }
+
+    /** The node's continue rail: one unfinished session on Yellowstone S04E03. */
+    val continueRail = """{"items":[{"session":{"id":"cs-1","asset_id":"as-S04E03","device_id":"dev-1","verb":"watch","state":"paused","progress":{"locator":"1425","unit":"seconds"},"created_at":"2026-09-06T20:00:00Z","updated_at":"2026-09-06T20:41:00Z","started_at":"2026-09-06T20:00:00Z","ended_at":null},
+      "work":{"id":"$YELLOWSTONE","content_type":"series","title":"Yellowstone","year":2018,"artwork":{"asset_id":"a","blob_hash":"$HASH","mime":"image/jpeg","content_url":"/api/v1/blobs/$HASH/content"}},
+      "edition":{"id":"e4","label":"Season 04","attributes":{}},
+      "asset":{"asset_id":"as-S04E03","edition_id":"e4","blob_hash":"$HASH","mime":"video/mp4","size":1411000000,"duration_seconds":3312.5,"content_url":"/api/v1/blobs/$HASH/content"}}]}"""
 
     /** JSON-RPC envelope around a tool result. */
     fun rpc(text: String) = """{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":${quote(text)}}]}}"""
@@ -150,6 +170,8 @@ class FakeHeyarrTransport(private val delayMs: Long = 0) : HttpTransport {
             path == "works" -> Fixtures.worksList()
             path == "quality-profiles" -> Fixtures.profiles
             path == "desired" -> Fixtures.desired
+            path == "consumption/continue" -> Fixtures.continueRail
+            path.startsWith("followed-sources/") && path.endsWith("/items") -> """{"items":[{"id":"fi-1","title":"Post-quantum by default","work_id":"w-cf-1","item_key":"2026-09-05","published_at":"2026-09-05T10:00:00Z","archived":true},{"id":"fi-2","title":"Workers AI: what shipped this month","work_id":"w-cf-2","item_key":"2026-09-02","published_at":"2026-09-02T09:30:00Z","archived":false}]}"""
             path.startsWith("desired/") && path.endsWith("/candidates") -> Fixtures.candidates(path.removePrefix("desired/").removeSuffix("/candidates"))
             path.startsWith("works/") && path.endsWith("/assets") -> Fixtures.assets(path.removePrefix("works/").removeSuffix("/assets"))
             path.startsWith("works/") -> Fixtures.workDetail(path.removePrefix("works/"))

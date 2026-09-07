@@ -132,6 +132,9 @@ fun MediaCard(
     onWant: (() -> Unit)? = null,
     width: Dp = Tokens.posterWidth,
     showBadge: Boolean = true,
+    /** 0..1 to draw a progress bar along the art's bottom edge (the continue rail). */
+    progress: Float? = null,
+    aspectOverride: CardAspect? = null,
 ) = MediaScope(type) {
     val theme = LocalMediaTheme.current
     val interaction = remember { MutableInteractionSource() }
@@ -146,8 +149,11 @@ fun MediaCard(
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onOpen)
             .semantics { this.contentDescription = "${type.label}: $title${status?.let { ", ${it.label}" } ?: ""}" },
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(theme.aspect.ratio)) {
+        Box(Modifier.fillMaxWidth().aspectRatio((aspectOverride ?: theme.aspect).ratio)) {
             Artwork(artwork, type, Modifier.fillMaxSize(), contentDescription = null)
+            if (progress != null) Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Tokens.bgBase.copy(alpha = 0.55f))) {
+                Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).height(4.dp).background(Brush.horizontalGradient(listOf(theme.accent, theme.accentGradientEnd))))
+            }
             if (theme.spineShadow) Box(Modifier.width(10.dp).fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent))))
             if (showBadge) MediaBadge(type, Modifier.align(Alignment.TopStart).padding(8.dp))
             if (status != null) StatusPill(status, Modifier.align(Alignment.TopEnd).padding(8.dp), compact = !hovered)

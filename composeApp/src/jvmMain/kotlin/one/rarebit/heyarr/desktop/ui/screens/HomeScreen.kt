@@ -24,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import one.rarebit.heyarr.desktop.feeds.FollowedSource
+import one.rarebit.heyarr.desktop.heyarr.ContinueEntry
+import one.rarebit.heyarr.desktop.theme.CardAspect as Aspect
 import one.rarebit.heyarr.desktop.library.Work
 import one.rarebit.heyarr.desktop.mcp.SearchHit
 import one.rarebit.heyarr.desktop.mcp.Want
@@ -54,6 +56,7 @@ class HomeState {
     var missing by mutableStateOf<RailState<Want>>(RailState.Loading)
     var upgrades by mutableStateOf<RailState<Want>>(RailState.Loading)
     var followed by mutableStateOf<RailState<FollowedSource>>(RailState.Loading)
+    var continueRail by mutableStateOf<RailState<ContinueEntry>>(RailState.Loading)
     var loadedOnce = false
 }
 
@@ -88,6 +91,7 @@ fun HomeScreen(session: AppSession, state: HomeState, onOpen: (Route) -> Unit, o
         scope.launch { state.missing = session.io { a.missing(40) }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
         scope.launch { state.upgrades = session.io { a.upgradeCandidates(40) }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
         scope.launch { state.followed = session.io { a.followed() }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+        scope.launch { state.continueRail = session.io { a.continueRail() }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
     }
 
     LaunchedEffect(session.config) { if (!state.loadedOnce || session.api != null) load() }
@@ -109,6 +113,14 @@ fun HomeScreen(session: AppSession, state: HomeState, onOpen: (Route) -> Unit, o
                 detail = "This node has no TVDB provider configured (ADR-0058), so discovery answers with a refusal. Search still finds everything already catalogued, and Missing lets you Want a title the library has never seen.",
                 icon = Icons.Rounded.Info,
             )
+        }
+        val cont = state.continueRail
+        if (cont !is RailState.Loaded || cont.items.isNotEmpty()) item {
+            Rail("Continue", cont, subtitle = "Unfinished playback sessions this node recorded — not history, just where a device stopped", emptyText = "", skeletonAspect = Aspect.SQUARE, skeletonWidth = 240.dp, key = { it.sessionId }) { e ->
+                val type = MediaType.from(e.contentType)
+                val art by session.artwork.rememberArtwork(e.artworkPath)
+                MediaCard(e.title, type, onOpen = { onOpen(Route.Detail(e.workId, type, e.title, from = "Home")) }, subtitle = listOfNotNull(e.editionLabel, e.progressLabel).joinToString("  ·  "), meta = listOf(e.state), artwork = art, status = session.index.statusOf(e.workId), width = 240.dp, progress = e.fraction, aspectOverride = Aspect.SQUARE)
+            }
         }
         item { WorkRail("Recently added", state.recent, session, onOpen, onWant, trailing = { GhostButton("Refresh", ::load, icon = Icons.Rounded.Refresh) }) }
         for (t in MediaType.SEARCHABLE) item {
