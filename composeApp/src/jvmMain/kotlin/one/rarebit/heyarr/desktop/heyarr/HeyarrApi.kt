@@ -140,9 +140,24 @@ class HeyarrApi(
     fun renderers(refresh: Boolean = false): List<Renderer> =
         RendererJson.list(mcp.call("list_renderers", if (refresh) mapOf("refresh" to true) else emptyMap()).require())
 
-    /** `play_here` — play an asset on a renderer; a device that cannot decode it refuses and says which codec. */
-    fun playHere(assetId: String, renderer: String): McpResult<Unit> =
-        mcp.call("play_here", mapOf("asset_id" to assetId, "renderer" to renderer)).map { }
+    /**
+     * Play an asset on a renderer. The `play_here` tool is tried first; when it answers
+     * only "the tool failed" (the MCP layer masks a renderer's UPnP refusal), the REST
+     * route behind it — `POST /renderers/{udn}/play` — is asked for the problem detail,
+     * which names the UPnP action and error code the device gave. That text is what
+     * the person needs, so it comes back verbatim.
+     */
+    fun playHere(assetId: String, renderer: String, udn: String? = null): McpResult<Unit> {
+        val viaTool = mcp.call("play_here", mapOf("asset_id" to assetId, "renderer" to renderer)).map { }
+        if (viaTool !is McpResult.Refused || udn == null || !viaTool.message.contains("tool failed")) return viaTool
+        val resp = try {
+            http.post("$baseUrl/api/v1/renderers/${enc(udn)}/play", one.rarebit.heyarr.desktop.mcp.JsonWrite.obj(mapOf("asset_id" to assetId)), "application/json", credential.asHeader())
+        } catch (e: IOException) { throw McpTransportException("heyarr is unreachable: ${e.message}", e) }
+        return when (resp.status) {
+            200, 201, 202 -> McpResult.Ok(Unit)
+            else -> McpResult.Refused(Problem.message(resp.body, resp.status, "play on renderer"), "renderers/play", resp.status)
+        }
+    }
 
     /** `control_playback` — pause / resume / stop. */
     fun control(renderer: String, action: String): McpResult<Unit> =

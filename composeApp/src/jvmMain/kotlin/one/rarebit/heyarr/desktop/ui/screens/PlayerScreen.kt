@@ -404,7 +404,7 @@ private fun CastRow(session: AppSession, state: PlayerScreenState, route: Route.
                     state.castOpen = false
                     scope.launch {
                         state.player.pause()
-                        session.io { a.playHere(route.assetId, x.name) }.onSuccess { res -> when (res) { is McpResult.Ok -> session.toast(Toast.Kind.SUCCESS, "Playing on ${x.name}", route.title); is McpResult.Refused -> session.refused(res) } }
+                        session.io { a.playHere(route.assetId, x.name, x.udn) }.onSuccess { res -> when (res) { is McpResult.Ok -> session.toast(Toast.Kind.SUCCESS, "Playing on ${x.name}", route.title); is McpResult.Refused -> session.refused(res) } }
                     }
                 }, icon = Icons.Rounded.Cast)
             }

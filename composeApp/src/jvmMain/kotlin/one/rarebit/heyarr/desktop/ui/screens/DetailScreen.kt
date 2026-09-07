@@ -362,7 +362,7 @@ private fun CastPicker(session: AppSession, state: DetailState) {
         state.castAssetId = null
         scope.launch {
             state.busy = "cast"
-            session.io { api.playHere(assetId, renderer.name) }.onSuccess { r -> when (r) { is McpResult.Ok -> session.toast(Toast.Kind.SUCCESS, "Playing on ${renderer.name}"); is McpResult.Refused -> session.refused(r) } }
+            session.io { api.playHere(assetId, renderer.name, renderer.udn) }.onSuccess { r -> when (r) { is McpResult.Ok -> session.toast(Toast.Kind.SUCCESS, "Playing on ${renderer.name}"); is McpResult.Refused -> session.refused(r) } }
             state.busy = null
         }
     }

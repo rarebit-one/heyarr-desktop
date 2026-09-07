@@ -33,6 +33,15 @@ val InterFamily: FontFamily by lazy {
     )
 }
 
+/** Rubik — the technical voice: nav captions, rule codes, key/value labels, badges, keyboard hints. Self-hosted static instances (OFL). */
+val RubikFamily: FontFamily by lazy {
+    FontFamily(
+        Font(resource = "fonts/Rubik-Regular.ttf", weight = FontWeight.Normal),
+        Font(resource = "fonts/Rubik-Medium.ttf", weight = FontWeight.Medium),
+        Font(resource = "fonts/Rubik-SemiBold.ttf", weight = FontWeight.SemiBold),
+    )
+}
+
 /** Montserrat — display headings only. */
 val MontserratFamily: FontFamily by lazy {
     FontFamily(
@@ -65,8 +74,10 @@ val HeyarrTypography: Typography by lazy {
         bodyMedium = TextStyle(fontFamily = body, fontSize = Tokens.Type.bodyM, fontWeight = FontWeight.Normal, lineHeight = 20.sp),
         bodySmall = TextStyle(fontFamily = body, fontSize = Tokens.Type.bodyS, fontWeight = FontWeight.Normal, lineHeight = 16.sp),
         labelLarge = TextStyle(fontFamily = body, fontSize = Tokens.Type.bodyM, fontWeight = FontWeight.Medium, lineHeight = 20.sp),
-        labelMedium = TextStyle(fontFamily = body, fontSize = Tokens.Type.bodyS, fontWeight = FontWeight.Medium, lineHeight = 16.sp, letterSpacing = 0.2.sp),
-        labelSmall = TextStyle(fontFamily = body, fontSize = Tokens.Type.bodyXs, fontWeight = FontWeight.Medium, lineHeight = 14.sp, letterSpacing = 0.4.sp),
+        // The two small label slots are the technical voice — Rubik — so chips, badges,
+        // key/value labels and captions read as instrumentation, not prose.
+        labelMedium = TextStyle(fontFamily = RubikFamily, fontSize = Tokens.Type.bodyS, fontWeight = FontWeight.Medium, lineHeight = 16.sp, letterSpacing = 0.2.sp),
+        labelSmall = TextStyle(fontFamily = RubikFamily, fontSize = Tokens.Type.bodyXs, fontWeight = FontWeight.Medium, lineHeight = 14.sp, letterSpacing = 0.4.sp),
     )
 }
 

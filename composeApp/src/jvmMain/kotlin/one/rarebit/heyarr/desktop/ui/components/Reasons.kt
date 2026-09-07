@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
+import one.rarebit.heyarr.desktop.theme.RubikFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import one.rarebit.heyarr.desktop.mcp.Reason
@@ -40,7 +42,7 @@ fun verdictColor(result: String): Color = when (result) {
 @Composable
 fun RuleCode(rule: String, modifier: Modifier = Modifier, tone: Color = Tokens.textPrimary) {
     Box(modifier.background(Tokens.surface3, RoundedCornerShape(5.dp)).border(Tokens.hairline, Tokens.border, RoundedCornerShape(5.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-        Text(rule, style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium), color = tone)
+        Text(rule, style = MaterialTheme.typography.labelMedium.copy(fontFamily = RubikFamily, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp), color = tone)
     }
 }
 
