@@ -49,14 +49,26 @@ fun VideoSurfaceHost(session: AppSession, onToggleFullscreen: () -> Unit, onBack
                     requestFocusInWindow()
                     if (e.clickCount == 2) onToggleFullscreen() else if (playback.onPlayerScreen) playback.player.togglePause()
                 }
+                // The surface sits above Compose, so it is the one that sees the pointer arrive; take the
+                // keyboard with it so the player's keys work without a click first.
+                override fun mouseEntered(e: java.awt.event.MouseEvent) { playback.controlsVisible = true; if (playback.onPlayerScreen) requestFocusInWindow() }
+            })
+            addMouseMotionListener(object : java.awt.event.MouseMotionAdapter() {
+                override fun mouseMoved(e: java.awt.event.MouseEvent) { playback.controlsVisible = true }
+                override fun mouseDragged(e: java.awt.event.MouseEvent) { playback.controlsVisible = true }
             })
             addKeyListener(object : java.awt.event.KeyAdapter() {
                 override fun keyPressed(e: java.awt.event.KeyEvent) {
                     val k = PlayerKeys.fromAwt(e.keyCode) ?: return
+                    playback.controlsVisible = true
                     if (PlayerKeys.handle(k, playback.player, onToggleFullscreen, onBack, playback.fullscreen)) e.consume()
                 }
             })
         }
+    }
+    // Entering fullscreen hands the keyboard to the surface — it is the whole window then.
+    LaunchedEffect(playback.fullscreen, playback.onPlayerScreen) {
+        if (playback.onPlayerScreen) { delay(120); runCatching { canvas.requestFocusInWindow() } }
     }
     // Start mpv into the canvas once it is realised; restart after a pop-out returns or an item needs a fresh process.
     LaunchedEffect(item.assetId, playback.pendingStart) {

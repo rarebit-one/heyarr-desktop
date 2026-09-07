@@ -93,7 +93,6 @@ import java.awt.GraphicsEnvironment
 class PlayerScreenState {
     var renderers by mutableStateOf<List<Renderer>?>(null)
     var castOpen by mutableStateOf(false)
-    var controlsVisible by mutableStateOf(true)
 }
 
 /** The keys the player answers to — one table for the Compose window and the AWT canvas alike. */
@@ -152,11 +151,11 @@ fun PlayerScreen(session: AppSession, state: PlayerScreenState, fullscreen: Bool
         val a = session.api ?: return@LaunchedEffect
         session.io { a.assets(item.workId) }.onSuccess { list -> playback.queue = Series.seasons(list).flatMap { it.episodes } }
     }
-    LaunchedEffect(fullscreen, ps.paused, state.controlsVisible) {
-        if (fullscreen && !ps.paused && state.controlsVisible) { delay(3500); state.controlsVisible = false }
-        if (!fullscreen) state.controlsVisible = true
+    LaunchedEffect(fullscreen, ps.paused, playback.controlsVisible) {
+        if (fullscreen && !ps.paused && playback.controlsVisible) { delay(3500); playback.controlsVisible = false }
+        if (!fullscreen) playback.controlsVisible = true
     }
-    fun toggleFullscreen() { onFullscreen(!fullscreen); state.controlsVisible = true }
+    fun toggleFullscreen() { onFullscreen(!fullscreen); playback.controlsVisible = true }
 
     MediaScope(type) {
         val theme = LocalMediaTheme.current
@@ -199,7 +198,7 @@ fun PlayerScreen(session: AppSession, state: PlayerScreenState, fullscreen: Bool
             }
 
             // ── the transport ──
-            if (state.controlsVisible || ps.paused || !fullscreen) Column(Modifier.fillMaxWidth().background(if (fullscreen) Color.Black else Tokens.bgBase).padding(horizontal = 24.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (playback.controlsVisible || ps.paused || !fullscreen) Column(Modifier.fillMaxWidth().background(if (fullscreen) Color.Black else Tokens.bgBase).padding(horizontal = 24.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SeekBar(ps, onSeek = { p.seekFraction(it.toDouble()) })
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     IconButtonRound(Icons.Rounded.Replay10, "Back 10 seconds (←)", { p.seekBy(-10.0) }, size = 36.dp)
