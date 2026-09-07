@@ -40,8 +40,8 @@ class SearchGroupingTest {
     @Test
     fun rowsAreReHomedByTheirOwnTypeAndDeduplicated() {
         // A series work returned by the untyped call must land under Series, not Movies, and only once.
-        val yellowstone = rows("yellowstone", null)
-        val segments = mapOf(MediaType.MOVIE to Segment.Loaded(yellowstone), MediaType.SERIES to Segment.Loaded(yellowstone))
+        val severance = rows("severance", null)
+        val segments = mapOf(MediaType.MOVIE to Segment.Loaded(severance), MediaType.SERIES to Segment.Loaded(severance))
         val sections = SearchGrouping.group(segments, Segment.Loaded(emptyList()), Segment.Loaded(emptyList()))
         assertTrue(sections.first { it.type == MediaType.MOVIE }.rows.isEmpty())
         assertEquals(1, sections.first { it.type == MediaType.SERIES }.rows.size)

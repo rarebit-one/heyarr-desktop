@@ -72,6 +72,8 @@ import one.rarebit.heyarr.desktop.library.Episode
 import one.rarebit.heyarr.desktop.library.PrimaryAsset
 import one.rarebit.heyarr.desktop.library.Season
 import one.rarebit.heyarr.desktop.library.Series
+import one.rarebit.heyarr.desktop.library.Variants
+import one.rarebit.heyarr.desktop.library.Work
 import one.rarebit.heyarr.desktop.library.WorkDetail
 import one.rarebit.heyarr.desktop.mcp.Explanation
 import one.rarebit.heyarr.desktop.mcp.ExternalId
@@ -117,6 +119,10 @@ import one.rarebit.heyarr.desktop.ui.components.Skeleton
 import one.rarebit.heyarr.desktop.ui.components.StatusPill
 import one.rarebit.heyarr.desktop.ui.components.focusRing
 import one.rarebit.heyarr.desktop.ui.components.verdictColor
+import one.rarebit.heyarr.desktop.ui.components.Cell
+import one.rarebit.heyarr.desktop.ui.components.Column as TableColumn
+import one.rarebit.heyarr.desktop.ui.components.DataTable
+import one.rarebit.heyarr.desktop.ui.components.Section
 
 /** The two faces of a work: what you came to watch, and the tooling that keeps it that way. */
 enum class DetailTab(val label: String) { WATCH("Watch"), CURATE("Curate") }
@@ -141,10 +147,13 @@ class DetailState(val workId: String) {
     var busy by mutableStateOf<String?>(null)
     /** Set by the screen each composition: how to open the embedded player. */
     var openPlayer: (Route.Player) -> Unit = {}
+    var openVariant: (Work) -> Unit = {}
     var wantMenu by mutableStateOf(false)
     /** What a public source said about this work (cover, synopsis, TVmaze id) — labelled as external wherever shown. */
     var external by mutableStateOf<ExternalMeta?>(null)
     var externalEpisodes by mutableStateOf<List<ExternalEpisode>>(emptyList())
+    /** Works the scanner minted for the same title's download folders (heyarr-core#470), folded under this one. */
+    var variants by mutableStateOf<List<Work>>(emptyList())
 }
 
 /**
@@ -182,6 +191,7 @@ fun DetailScreen(session: AppSession, route: Route.Detail, state: DetailState, o
         }
         scope.launch { session.io { a.assets(route.workId) }.onSuccess { state.assets = it } }
         scope.launch { session.io { a.externalIds(route.workId) }.onSuccess { state.externalIds = it } }
+        scope.launch { session.io { a.works() }.onSuccess { all -> state.variants = Variants.group(all)[route.workId].orEmpty() } }
         scope.launch { session.io { a.continueRail() }.onSuccess { list -> state.continueEntry = list.firstOrNull { it.workId == route.workId } } }
     }
     fun loadWants() {
@@ -193,6 +203,7 @@ fun DetailScreen(session: AppSession, route: Route.Detail, state: DetailState, o
         }
     }
     state.openPlayer = { r -> onOpen(r) }
+    state.openVariant = { v -> onOpen(Route.Detail(v.id, MediaType.from(v.kind), v.title, from = route.titleHint ?: "Back", curate = true)) }
     LaunchedEffect(route.workId) { if (route.curate) state.tab = DetailTab.CURATE; load() }
     LaunchedEffect(wants.map { it.id }) { loadWants() }
     LaunchedEffect(detail?.primaryAsset?.blobHash) {
@@ -235,19 +246,7 @@ fun DetailScreen(session: AppSession, route: Route.Detail, state: DetailState, o
                         else -> item { FileBlock(session, detail, state) }
                     }
                 } else {
-                    item { TwoColumn(
-                        left = {
-                            WhyPanel(session, wants, state, ::loadWants)
-                            ReleasesPanel(session, wants, state, ::loadWants)
-                            ExplainPanel(session, wants)
-                        },
-                        right = {
-                            HealthPanel(session, detail, wants, state)
-                            SidecarsPanel(session, state, seasons, wants)
-                            DetailsPanel(detail, state, type)
-                            FilesPanel(state.assets.orEmpty())
-                        },
-                    ) }
+                    item { CurateTab(session, detail, type, wants, state, seasons, ::loadWants) }
                 }
             }
             item { Spacer(Modifier.height(24.dp)) }
@@ -670,124 +669,6 @@ private fun SidecarsPanel(session: AppSession, state: DetailState, seasons: List
     }
 }
 
-@Composable
-private fun TwoColumn(left: @Composable () -> Unit, right: @Composable () -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.Top) {
-        Column(Modifier.weight(1.4f), verticalArrangement = Arrangement.spacedBy(20.dp)) { left() }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp)) { right() }
-    }
-}
-
-@Composable
-private fun WhyPanel(session: AppSession, wants: List<DesiredItem>, state: DetailState, reload: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    Panel("Why this release", trailing = { GhostButton("Refresh", reload) }) {
-        if (wants.isEmpty()) { Text("Not wanted, so there is no profile to measure against. Want it to see every rule heyarr would apply.", style = MaterialTheme.typography.bodyMedium, color = Tokens.textMuted); return@Panel }
-        for (w in wants) {
-            val profile = session.profiles.firstOrNull { it.id == w.qualityProfileId }?.name ?: w.qualityProfileId ?: "?"
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatusPill(LibraryStatus.ofState(w.state))
-                    Text(w.state.lowercase().replace('_', ' '), style = MaterialTheme.typography.labelMedium, color = Tokens.textMuted)
-                    Text("·  profile $profile", style = MaterialTheme.typography.labelMedium, color = Tokens.textMuted, modifier = Modifier.weight(1f))
-                    FilterChip(if (w.monitor) "Monitoring" else "Not monitoring", w.monitor, {
-                        val a = session.api ?: return@FilterChip
-                        scope.launch { session.io { a.monitor(w.id, !w.monitor) }.onSuccess { r -> if (r is McpResult.Refused) session.refused(r) else session.refreshIndex() } }
-                    })
-                }
-                if (w.detail != null) Text(w.detail, style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
-                when (val s = state.satisfaction[w.id]) {
-                    null -> Skeleton(Modifier.fillMaxWidth().height(48.dp))
-                    is McpResult.Refused -> Notice("get_content_satisfaction: ${s.message}", tone = Tokens.danger)
-                    is McpResult.Ok -> {
-                        val sat = s.value
-                        if (sat == null) Text("No satisfaction report.", color = Tokens.textMuted, style = MaterialTheme.typography.bodySmall)
-                        else {
-                            KeyValue("content", sat.contentSatisfaction.replace('_', ' '), valueColor = verdictColor(if (sat.contentSatisfaction == "satisfied") "pass" else "fail"))
-                            KeyValue("placement", if (sat.placementUnproven) "unproven — single-node fabric, nowhere to converge to" else sat.placementSatisfaction + (sat.placementDetail.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""))
-                            KeyValue("upgrade", (if (sat.upgradeEligible) "eligible" else sat.upgradeStatus.replace('_', ' ')) + (sat.upgradeDetail.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""))
-                            if (sat.assets.isEmpty()) Text("Nothing is held for this want; the rules below apply to candidates instead.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
-                            for (asset in sat.assets) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(if (asset.accepted) "accepted" else "not accepted", style = MaterialTheme.typography.labelMedium, color = verdictColor(if (asset.accepted) "pass" else "fail"))
-                                    Text("asset ${asset.assetId.takeLast(8)} · score ${asset.score}${if (asset.terminal) " · terminal" else ""}", style = MaterialTheme.typography.labelSmall, color = Tokens.textDisabled)
-                                }
-                                ReasonList(asset.reasons)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReleasesPanel(session: AppSession, wants: List<DesiredItem>, state: DetailState, reload: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    if (wants.isEmpty()) return
-    Panel("Releases", trailing = {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (w in wants.take(1)) SecondaryButton("Search indexers now", {
-                val a = session.api ?: return@SecondaryButton
-                scope.launch {
-                    session.io { a.searchReleases(w.id) }.onSuccess { r ->
-                        when (r) {
-                            is McpResult.Ok -> session.toast(Toast.Kind.INFO, "Search queued", "An indexer can take thirty seconds to answer; refresh Releases in a moment." + (r.value.jobId?.let { " Job $it." } ?: ""))
-                            is McpResult.Refused -> session.refused(r)
-                        }
-                    }
-                }
-            }, icon = Icons.Rounded.Search, compact = true)
-        }
-    }) {
-        for (w in wants) {
-            val list = state.candidates[w.id]
-            when {
-                list == null -> Skeleton(Modifier.fillMaxWidth().height(40.dp))
-                list.isEmpty() -> Text("The last search found no candidates${w.detail?.let { " — $it" } ?: ""}.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
-                else -> for (c in list) CandidateRow(session, w, c, state, reload)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CandidateRow(session: AppSession, want: DesiredItem, c: Candidate, state: DetailState, reload: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var expanded by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(c.title, style = MaterialTheme.typography.titleSmall, color = Tokens.textPrimary)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(if (c.accepted) "accepted" else "rejected", style = MaterialTheme.typography.labelMedium, color = verdictColor(if (c.accepted) "pass" else "fail"))
-                    Text("score ${c.score}", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
-                    c.provider?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted) }
-                    c.sizeBytes?.let { Text(PrimaryAsset.formatBytes(it), style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted) }
-                    if (c.selected) Text("selected", style = MaterialTheme.typography.labelSmall, color = LocalMediaTheme.current.accentGradientEnd)
-                }
-            }
-            GhostButton(if (expanded) "Hide rules" else "Rules (${c.reasons.size})", { expanded = !expanded })
-            PrimaryButton("Acquire", {
-                val a = session.api ?: return@PrimaryButton
-                scope.launch {
-                    state.busy = c.candidateId
-                    session.io { a.acquire(want.id, c.candidateId) }.onSuccess { r ->
-                        when (r) {
-                            is McpResult.Ok -> { session.toast(Toast.Kind.SUCCESS, "Acquiring", c.title); session.refreshIndex(); reload() }
-                            is McpResult.Refused -> session.refused(r)
-                        }
-                    }
-                    state.busy = null
-                }
-            }, icon = Icons.Rounded.Download, compact = true, enabled = state.busy == null)
-        }
-        RejectedBy(c.rejectedBy)
-        if (expanded) ReasonList(c.reasons)
-    }
-}
-
 /** "Would this be accepted?" — describe a release, get every rule back. Absent fields stay absent so they read as undetermined. */
 @Composable
 private fun ExplainPanel(session: AppSession, wants: List<DesiredItem>) {
@@ -859,53 +740,153 @@ fun Field(label: String, value: String, modifier: Modifier = Modifier, placehold
     }
 }
 
+
+// ── Curate ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The curation surface as tables, one column, each section collapsible: what each want
+ * is measured against and where it stands; every held file with the verdict the profile
+ * gave it (rules behind a click); the indexer candidates with Acquire; a release scorer;
+ * health; captions and artwork; the works the scanner minted for the same title; the
+ * identifiers; the raw file list. Nothing here is paraphrased — rule codes, states and
+ * the node's detail lines are shown as sent.
+ */
 @Composable
-private fun HealthPanel(session: AppSession, detail: WorkDetail, wants: List<DesiredItem>, state: DetailState) {
+private fun CurateTab(session: AppSession, detail: WorkDetail, type: MediaType, wants: List<DesiredItem>, state: DetailState, seasons: List<Season>, reload: () -> Unit) {
     val scope = rememberCoroutineScope()
-    val hash = detail.primaryAsset?.blobHash
-    Panel("Health") {
-        if (hash == null) { Text("No held bytes to check.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted); return@Panel }
-        KeyValue("blob", hash.take(16) + "…", valueColor = Tokens.textMuted)
-        when (val r = state.replicas) {
-            null -> Skeleton(Modifier.fillMaxWidth().height(20.dp))
-            is McpResult.Refused -> Notice("get_replica_status: ${r.message}", tone = Tokens.danger)
-            is McpResult.Ok -> if (r.value.isEmpty()) Text("No replica report — on a single-node fabric there is nowhere for bytes to converge to.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
-            else for (rep in r.value) KeyValue(rep.peer, "${rep.state}${if (rep.verified) " · verified" else " · not verified"}", valueColor = if (rep.verified) verdictColor("pass") else Tokens.ratingGold)
+    val assets = state.assets.orEmpty()
+    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        // 1. Status
+        Section("Wants & status", subtitle = if (wants.isEmpty()) "Not wanted — nothing measures this work" else "${wants.size} want${if (wants.size == 1) "" else "s"} on this work", trailing = { GhostButton("Refresh", reload) }) {
+            DataTable(
+                columns = listOf(TableColumn("Scope", width = 90.dp), TableColumn("Profile", width = 120.dp), TableColumn("State", width = 120.dp), TableColumn("Content", width = 110.dp), TableColumn("Placement", 1.2f), TableColumn("Upgrade", 1.4f), TableColumn("Monitor", width = 120.dp, alignEnd = true)),
+                rowCount = wants.size, emptyText = "Not wanted. Want it (or a season) to see every rule heyarr would apply.",
+            ) { r, c ->
+                val w = wants[r]
+                val sat = (state.satisfaction[w.id] as? McpResult.Ok)?.value
+                when (c) {
+                    0 -> Cell(w.id.takeIf { it.startsWith("pending:") }?.let { "sending…" } ?: (w.detail?.let { "" } ?: "").ifBlank { if (w.qualityProfileId != null) "work" else "" }, muted = true)
+                    1 -> Cell(session.profiles.firstOrNull { it.id == w.qualityProfileId }?.name ?: w.qualityProfileId ?: "?", mono = true)
+                    2 -> StatusPill(LibraryStatus.ofState(w.state))
+                    3 -> Text(sat?.contentSatisfaction?.replace('_', ' ') ?: (w.content ?: "…"), style = MaterialTheme.typography.labelMedium, color = verdictColor(if ((sat?.contentSatisfaction ?: w.content) == "satisfied") "pass" else "fail"))
+                    4 -> Cell(sat?.let { if (it.placementUnproven) "unproven (single node)" else it.placementSatisfaction } ?: (w.placement ?: "…"), muted = true)
+                    5 -> Cell(sat?.let { (if (it.upgradeEligible) "eligible" else it.upgradeStatus.replace('_', ' ')) + (it.upgradeDetail.takeIf { d -> d.isNotBlank() }?.let { d -> " — $d" } ?: "") } ?: (w.detail ?: ""), muted = true, maxLines = 2)
+                    6 -> FilterChip(if (w.monitor) "Monitoring" else "Off", w.monitor, {
+                        val a = session.api ?: return@FilterChip
+                        scope.launch { session.io { a.monitor(w.id, !w.monitor) }.onSuccess { res -> if (res is McpResult.Refused) session.refused(res) else session.refreshIndex() } }
+                    })
+                }
+            }
+            for (w in wants) (state.satisfaction[w.id] as? McpResult.Refused)?.let { Notice("get_content_satisfaction: ${it.message}", tone = Tokens.danger) }
         }
-        SecondaryButton("Verify bytes now", {
-            val a = session.api ?: return@SecondaryButton
-            scope.launch { session.io { a.verifyBlob(hash) }.onSuccess { r -> when (r) { is McpResult.Ok -> session.toast(Toast.Kind.INFO, "Verification queued", "Re-hashing runs as a job; the answer lands on the job, not here."); is McpResult.Refused -> session.refused(r) } } }
-        }, icon = Icons.Rounded.Verified, compact = true)
-    }
-}
 
-@Composable
-private fun DetailsPanel(detail: WorkDetail, state: DetailState, type: MediaType) {
-    Panel("Details") {
-        KeyValue("type", type.label)
-        detail.work.year?.let { KeyValue("year", it.toString()) }
-        detail.work.workKey?.let { KeyValue("work key", it, valueColor = Tokens.textMuted) }
-        detail.primaryAsset?.let { a ->
-            a.mime?.let { KeyValue("primary file", it) }
-            a.sizeBytes?.let { KeyValue("size", PrimaryAsset.formatBytes(it)) }
-        }
-        if (state.externalIds.isEmpty()) KeyValue("external ids", "none recorded", valueColor = Tokens.textMuted)
-        else for (e in state.externalIds) KeyValue(e.source, e.value)
-    }
-}
-
-@Composable
-private fun FilesPanel(assets: List<Track>) {
-    Panel("Files (${assets.size})") {
-        if (assets.isEmpty()) Text("No files scanned for this work.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
-        for (t in assets.take(30)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                RuleCode(t.role ?: "primary", tone = Tokens.textMuted)
-                Text(t.filename ?: t.id, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Default), color = if (t.isPlayable) Tokens.textPrimary else Tokens.textDisabled, modifier = Modifier.weight(1f), maxLines = 1)
-                t.sizeBytes?.let { Text(PrimaryAsset.formatBytes(it), style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted) }
-                if (t.missingSince != null) Text("missing", style = MaterialTheme.typography.labelSmall, color = Tokens.danger)
+        // 2. Held files with verdicts
+        val verdicts = wants.flatMap { w -> (state.satisfaction[w.id] as? McpResult.Ok)?.value?.assets.orEmpty() }.associateBy { it.assetId }
+        val held = assets.filter { it.isPrimaryRole && it.blobHash != null }
+        Section("Held files", subtitle = "${held.size} playable file${if (held.size == 1) "" else "s"} · ${verdicts.size} judged against a profile") {
+            DataTable(
+                columns = listOf(TableColumn("File", 3f), TableColumn("Size", width = 80.dp, alignEnd = true), TableColumn("Verdict", width = 110.dp), TableColumn("Score", width = 60.dp, alignEnd = true), TableColumn("Rejected by", 1.6f)),
+                rowCount = held.size, emptyText = "Nothing held for this work.",
+                detailLabel = { r -> held[r].filename ?: held[r].id },
+                detail = { r -> verdicts[held[r].id]?.let { ReasonList(it.reasons) } ?: Text("No verdict — this file is not measured by any want.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted) },
+            ) { r, c ->
+                val t = held[r]; val v = verdicts[t.id]
+                when (c) {
+                    0 -> Cell(t.filename ?: t.id)
+                    1 -> Cell(t.sizeBytes?.let { PrimaryAsset.formatBytes(it) } ?: "", muted = true)
+                    2 -> Text(when { v == null -> "unmeasured"; v.accepted -> "accepted"; else -> "rejected" }, style = MaterialTheme.typography.labelMedium, color = verdictColor(when { v == null -> ""; v.accepted -> "pass"; else -> "fail" }))
+                    3 -> Cell(v?.score?.toString() ?: "", muted = true, mono = true)
+                    4 -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { for (x in v?.rejectedBy.orEmpty().take(2)) RuleCode(x.rule, tone = Tokens.danger); if ((v?.rejectedBy?.size ?: 0) > 2) Cell("+${v!!.rejectedBy.size - 2}", muted = true) }
+                }
             }
         }
-        if (assets.size > 30) Text("…and ${assets.size - 30} more", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
+
+        // 3. Indexer candidates
+        val cands = wants.flatMap { w -> state.candidates[w.id].orEmpty().map { w to it } }
+        Section("Indexer candidates", subtitle = if (wants.isEmpty()) "Want it first — candidates belong to a want" else "${cands.size} from the last search", trailing = {
+            if (wants.isNotEmpty()) SecondaryButton("Search indexers now", {
+                val a = session.api ?: return@SecondaryButton
+                scope.launch { session.io { a.searchReleases(wants.first().id) }.onSuccess { r -> when (r) { is McpResult.Ok -> session.toast(Toast.Kind.INFO, "Search queued", "Indexers answer within a minute; the Downloads tab under Library shows the job."); is McpResult.Refused -> session.refused(r) } } }
+            }, icon = Icons.Rounded.Search, compact = true)
+        }) {
+            DataTable(
+                columns = listOf(TableColumn("Release", 3f), TableColumn("Provider", width = 110.dp), TableColumn("Size", width = 80.dp, alignEnd = true), TableColumn("Score", width = 60.dp, alignEnd = true), TableColumn("Verdict", width = 100.dp), TableColumn("", width = 110.dp, alignEnd = true)),
+                rowCount = cands.size, emptyText = if (wants.isEmpty()) "No want, no candidates." else "The last search found nothing${wants.firstOrNull()?.detail?.let { " — $it" } ?: ""}.",
+                detailLabel = { r -> cands[r].second.title },
+                detail = { r -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { RejectedBy(cands[r].second.rejectedBy); ReasonList(cands[r].second.reasons) } },
+            ) { r, c ->
+                val (w, cand) = cands[r]
+                when (c) {
+                    0 -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { Cell(cand.title); if (cand.selected) Text("selected", style = MaterialTheme.typography.labelSmall, color = LocalMediaTheme.current.accentGradientEnd) }
+                    1 -> Cell(cand.provider ?: "", muted = true, mono = true)
+                    2 -> Cell(cand.sizeBytes?.let { PrimaryAsset.formatBytes(it) } ?: "", muted = true)
+                    3 -> Cell(cand.score.toString(), muted = true, mono = true)
+                    4 -> Text(if (cand.accepted) "accepted" else "rejected", style = MaterialTheme.typography.labelMedium, color = verdictColor(if (cand.accepted) "pass" else "fail"))
+                    5 -> PrimaryButton("Acquire", {
+                        val a = session.api ?: return@PrimaryButton
+                        scope.launch {
+                            state.busy = cand.candidateId
+                            session.io { a.acquire(w.id, cand.candidateId) }.onSuccess { res -> when (res) { is McpResult.Ok -> { session.toast(Toast.Kind.SUCCESS, "Acquiring", cand.title); session.refreshIndex(); reload() }; is McpResult.Refused -> session.refused(res) } }
+                            state.busy = null
+                        }
+                    }, icon = Icons.Rounded.Download, compact = true, enabled = state.busy == null)
+                }
+            }
+        }
+
+        // 4. Score a release
+        Section("Score a release", subtitle = "Ask the profile about a release you are looking at", initiallyOpen = false) { ExplainPanel(session, wants) }
+
+        // 5. Health
+        val hash = detail.primaryAsset?.blobHash
+        Section("Health", subtitle = hash?.let { "primary blob ${it.take(20)}…" } ?: "no held bytes to check", trailing = {
+            if (hash != null) SecondaryButton("Verify bytes now", {
+                val a = session.api ?: return@SecondaryButton
+                scope.launch { session.io { a.verifyBlob(hash) }.onSuccess { r -> when (r) { is McpResult.Ok -> session.toast(Toast.Kind.INFO, "Verification queued", "Re-hashing runs as a job; see Library → Downloads."); is McpResult.Refused -> session.refused(r) } } }
+            }, icon = Icons.Rounded.Verified, compact = true)
+        }) {
+            when (val r = state.replicas) {
+                null -> if (hash != null) Skeleton(Modifier.fillMaxWidth().height(40.dp)) else Text("Nothing to check.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+                is McpResult.Refused -> Notice("get_replica_status: ${r.message}", tone = Tokens.danger)
+                is McpResult.Ok -> DataTable(columns = listOf(TableColumn("Peer", 1f), TableColumn("Copy", width = 120.dp), TableColumn("Verified", width = 100.dp)), rowCount = r.value.size, emptyText = "No replica report — on a single-node fabric there is nowhere for bytes to converge to.") { i, c ->
+                    val rep = r.value[i]
+                    when (c) { 0 -> Cell(rep.peer); 1 -> Cell(rep.state, mono = true); 2 -> Text(if (rep.verified) "yes" else "no", style = MaterialTheme.typography.labelMedium, color = verdictColor(if (rep.verified) "pass" else "undetermined")) }
+                }
+            }
+        }
+
+        // 6. Captions & artwork
+        Section("Captions & artwork", initiallyOpen = false) { SidecarsPanel(session, state, seasons, wants) }
+
+        // 7. Also catalogued as
+        if (state.variants.isNotEmpty()) Section("Also catalogued as", subtitle = "Works the scanner minted for this title's download folders (heyarr-core#470) — hidden from listings, folded here") {
+            DataTable(columns = listOf(TableColumn("Work", 2f), TableColumn("Season", width = 80.dp), TableColumn("", width = 90.dp, alignEnd = true)), rowCount = state.variants.size) { i, c ->
+                val v = state.variants[i]
+                when (c) { 0 -> Cell(v.title); 1 -> Cell(Variants.seasonOf(v)?.let { "S$it" } ?: "", mono = true, muted = true); 2 -> GhostButton("Open", { state.openVariant(v) }) }
+            }
+        }
+
+        // 8. Details
+        Section("Identifiers", initiallyOpen = false) {
+            DataTable(columns = listOf(TableColumn("Key", width = 140.dp), TableColumn("Value", 1f)), rowCount = 3 + state.externalIds.size) { i, c ->
+                val rows = listOf("work id" to detail.work.id, "work key" to (detail.work.workKey ?: "—"), "type" to type.label) + state.externalIds.map { it.source to it.value }
+                val (k, v) = rows[i]
+                when (c) { 0 -> Cell(k, muted = true, mono = true); 1 -> Cell(v, mono = true) }
+            }
+        }
+
+        // 9. Files
+        Section("All files", subtitle = "${assets.size} scanned", initiallyOpen = false) {
+            DataTable(columns = listOf(TableColumn("File", 3f), TableColumn("Role", width = 90.dp), TableColumn("Type", width = 130.dp), TableColumn("Size", width = 80.dp, alignEnd = true), TableColumn("", width = 90.dp)), rowCount = assets.size, emptyText = "No files scanned.") { i, c ->
+                val t = assets[i]
+                when (c) {
+                    0 -> Cell(t.filename ?: t.id, color = if (t.isPlayable || t.role == "artwork") Tokens.textPrimary else Tokens.textDisabled)
+                    1 -> Cell(t.role ?: "primary", mono = true, muted = true)
+                    2 -> Cell(t.mime ?: "", mono = true, muted = true)
+                    3 -> Cell(t.sizeBytes?.let { PrimaryAsset.formatBytes(it) } ?: "", muted = true)
+                    4 -> if (t.missingSince != null) Text("missing", style = MaterialTheme.typography.labelSmall, color = Tokens.danger) else Cell("")
+                }
+            }
+        }
     }
 }

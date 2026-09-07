@@ -65,6 +65,9 @@ import one.rarebit.heyarr.desktop.ui.components.Panel
 import one.rarebit.heyarr.desktop.ui.components.PrimaryButton
 import one.rarebit.heyarr.desktop.ui.components.SideNav
 import one.rarebit.heyarr.desktop.ui.components.ToastCard
+import one.rarebit.heyarr.desktop.ui.components.NowPlayingBar
+import one.rarebit.heyarr.desktop.ui.components.VideoSurfaceHost
+import one.rarebit.heyarr.desktop.ui.screens.accentHex
 import one.rarebit.heyarr.desktop.ui.screens.DetailScreen
 import one.rarebit.heyarr.desktop.ui.screens.DetailState
 import one.rarebit.heyarr.desktop.ui.screens.Field
@@ -107,6 +110,7 @@ fun App(
     initialQuery: String? = null,
     /** Preview/test seam: open the connection sheet at once. */
     initialConnectionSheet: Boolean = false,
+    initialLibraryTab: Int = 0,
     /** Called when the player wants the window fullscreen (Main flips the WindowState placement). */
     onFullscreen: (Boolean) -> Unit = {},
 ) {
@@ -115,14 +119,15 @@ fun App(
     val nav = remember { Nav(initialRoute) }
     val search = remember { SearchController(scope, { session.api }, session::noteTransportFailure) }
     val home = remember { HomeState() }
-    val library = remember { LibraryState() }
+    val library = remember { LibraryState().apply { tab = initialLibraryTab } }
     val missing = remember { MissingState() }
     val nowPlaying = remember { NowPlayingState() }
     val settingsState = remember { SettingsState() }
     val details = remember { mutableStateMapOf<String, DetailState>() }
-    val players = remember { mutableStateMapOf<String, PlayerScreenState>() }
-    var fullscreen by remember { mutableStateOf(false) }
-    fun setFullscreen(on: Boolean) { fullscreen = on; onFullscreen(on) }
+    val playerScreen = remember { PlayerScreenState() }
+    val playback = session.playback
+    val fullscreen = playback.fullscreen
+    fun setFullscreen(on: Boolean) { playback.fullscreen = on; onFullscreen(on) }
     val searchFocus = remember { FocusRequester() }
     var focusSearchTick by remember { mutableStateOf(0) }
     var want by remember { mutableStateOf<WantRequest?>(null) }
@@ -134,6 +139,13 @@ fun App(
 
     fun openSearch() { nav.go(Route.Search); focusSearchTick++ }
     val current = nav.current
+    // The session player streams with the saved connection; the pop-out OSC takes the media accent.
+    LaunchedEffect(session.config, playback.current?.assetId) {
+        playback.baseUrl = session.config.baseUrl; playback.token = session.config.bearerToken.trim()
+        playback.accentHex = accentHex(MediaThemes.of(playback.type).accent)
+    }
+    // Navigating to a Player route hands the item to the session; the surface host does the rest.
+    LaunchedEffect(current) { (current as? Route.Player)?.let { r -> if (playback.current?.assetId != r.assetId) playback.play(r) } }
     val focusType = when (current) {
         is Route.Detail -> details[current.workId]?.detail?.work?.kind?.let { MediaType.from(it) } ?: current.typeHint
         is Route.Player -> current.typeHint
@@ -148,9 +160,8 @@ fun App(
                 Modifier.fillMaxSize().background(Tokens.bgBase).onPreviewKeyEvent { e ->
                     if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     val mod = e.isCtrlPressed || e.isMetaPressed
-                    val playerState = (current as? Route.Player)?.let { players[it.workId + "/" + it.assetId] }
-                    if (playerState != null && !mod && want == null) {
-                        if (PlayerKeys.handle(e.key, playerState.player, { setFullscreen(!fullscreen) }, { if (fullscreen) setFullscreen(false); nav.back() }, fullscreen)) return@onPreviewKeyEvent true
+                    if (current is Route.Player && !mod && want == null) {
+                        if (PlayerKeys.handle(e.key, playback.player, { setFullscreen(!fullscreen) }, { if (fullscreen) setFullscreen(false); nav.back() }, fullscreen)) return@onPreviewKeyEvent true
                     }
                     when {
                         mod && e.key == Key.K -> { openSearch(); true }
@@ -185,7 +196,7 @@ fun App(
                                 else -> {}
                             }
                             val onWant: (String, String) -> Unit = { id, title -> want = WantRequest(id, title) }
-                            when (val r = current) {
+                            Box(Modifier.weight(1f)) { when (val r = current) {
                                 Route.Home -> HomeScreen(session, home, nav::go, onWant)
                                 Route.Discover -> HomeScreen(session, home, nav::go, onWant, discover = true)
                                 Route.Search -> SearchScreen(session, search, nav::go, onWant, searchFocus)
@@ -194,11 +205,13 @@ fun App(
                                 Route.NowPlaying -> NowPlayingScreen(session, nowPlaying)
                                 Route.Settings -> SettingsScreen(session, settingsState, onSourcesChanged = { search.invalidateSources() })
                                 is Route.Detail -> DetailScreen(session, r, details.getOrPut(r.workId) { DetailState(r.workId) }, onBack = nav::back, onOpen = nav::go, onWant = onWant)
-                                is Route.Player -> PlayerScreen(session, players.getOrPut(r.workId + "/" + r.assetId) { PlayerScreenState(r) }, fullscreen = fullscreen, onFullscreen = ::setFullscreen, onBack = { if (fullscreen) setFullscreen(false); players.remove(r.workId + "/" + r.assetId); nav.back() }, onOpen = nav::go)
-                            }
+                                is Route.Player -> PlayerScreen(session, playerScreen, fullscreen = fullscreen, onFullscreen = ::setFullscreen, onBack = { if (fullscreen) setFullscreen(false); nav.back() }, onOpen = nav::go)
+                            } }
+                            if (playback.active && current !is Route.Player && !fullscreen) NowPlayingBar(playback, onOpen = { playback.current?.let { nav.go(it) } })
                         }
                     }
                 }
+                VideoSurfaceHost(session, onToggleFullscreen = { setFullscreen(!fullscreen) }, onBack = nav::back)
                 Column(Modifier.align(Alignment.BottomEnd).padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
                     for (t in session.toasts.takeLast(4)) ToastCard(t, onDismiss = { session.dismiss(t) })
                 }

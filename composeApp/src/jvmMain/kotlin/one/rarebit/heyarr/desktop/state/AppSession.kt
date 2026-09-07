@@ -62,6 +62,9 @@ class AppSession(
         HeyarrApi(transport, config.baseUrl, Credential.Bearer(it))
     }
 
+    /** App-wide playback: one mpv for the session, surface owned by the shell. */
+    val playback = PlaybackSession()
+
     val artwork: ArtworkLoader = artworkLoader ?: ArtworkLoader({ config.baseUrl }, { config.bearerToken.trim() })
     val external: ExternalMetadata = externalMetadata ?: ExternalMetadata(enabled = { config.externalMetadata })
     val recent = RecentSearches(RecentSearches.defaultFile())

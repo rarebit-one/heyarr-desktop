@@ -35,6 +35,7 @@ fun main(args: Array<String>) {
         "04-detail-movie-missing" to Route.Detail(Fixtures.SINTEL, MediaType.MOVIE, "Sintel", from = "Missing"),
         "05-detail-book" to Route.Detail("w-piranesi", MediaType.BOOK, "Piranesi", from = "Library"),
         "06-library" to Route.Library,
+        "06b-downloads" to Route.Library,
         "05b-player" to Route.Player(Fixtures.YELLOWSTONE, "as-S04E03", Fixtures.HASH, "Yellowstone", "S04E03 All I See Is You", typeHint = MediaType.SERIES, from = "Back"),
         "07-missing" to Route.Missing,
         "08-now-playing" to Route.NowPlaying,
@@ -51,7 +52,7 @@ fun main(args: Array<String>) {
     println("wrote ${out.listFiles()?.size ?: 0} screenshots to $out")
 }
 
-private fun render(file: File, width: Int, height: Int, route: Route, query: String? = null, connection: Boolean = false) {
+private fun render(file: File, width: Int, height: Int, route: Route, query: String? = null, connection: Boolean = false, downloads: Boolean = false) {
     val transport = FakeHeyarrTransport()
     val settings = InMemorySettingsStore(DesktopConfig(baseUrl = "https://heyarr.example.test:7777", bearerToken = "heyarr_fixture_token"))
     val art = ArtworkLoader({ "" }, { "" }, fetcher = { PlaceholderArt.bytes(it) })
@@ -59,7 +60,7 @@ private fun render(file: File, width: Int, height: Int, route: Route, query: Str
         scene.setContent {
             App(
                 settings = settings, transport = transport, player = NoPlayer, opener = NoOpener, downloader = NoDownloader,
-                initialRoute = route, artworkLoader = art, externalMetadata = one.rarebit.heyarr.desktop.state.ExternalMetadata.NONE, initialQuery = query, initialConnectionSheet = connection,
+                initialRoute = route, artworkLoader = art, externalMetadata = one.rarebit.heyarr.desktop.state.ExternalMetadata.NONE, initialQuery = query, initialConnectionSheet = connection, initialLibraryTab = if (downloads) 1 else 0,
             )
         }
         // Let effects (fixture fetches on IO) land: render, wait, re-render until quiet.

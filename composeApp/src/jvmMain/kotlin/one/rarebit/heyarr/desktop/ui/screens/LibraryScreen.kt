@@ -29,7 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import one.rarebit.heyarr.desktop.library.Variants
 import one.rarebit.heyarr.desktop.library.Work
+import androidx.compose.runtime.remember
 import one.rarebit.heyarr.desktop.state.AppSession
 import one.rarebit.heyarr.desktop.state.LibraryStatus
 import one.rarebit.heyarr.desktop.theme.MediaScope
@@ -52,6 +54,8 @@ val MEDIA = MediaType.UNKNOWN
 private val MEDIA_KINDS = setOf(MediaType.MOVIE, MediaType.SERIES, MediaType.MUSIC, MediaType.BOOK, MediaType.AUDIOBOOK, MediaType.PODCAST)
 
 class LibraryState {
+    var tab by mutableStateOf(0)
+    val downloads = DownloadsState()
     var works by mutableStateOf<List<Work>?>(null)
     var error by mutableStateOf<String?>(null)
     var loading by mutableStateOf(false)
@@ -79,7 +83,8 @@ fun LibraryScreen(session: AppSession, state: LibraryState, onOpen: (Route) -> U
     }
     LaunchedEffect(session.config) { if (state.works == null) load() }
 
-    val all = state.works.orEmpty()
+    val variants = remember(state.works) { Variants.variantIds(state.works.orEmpty()) }
+    val all = state.works.orEmpty().filter { it.id !in variants }
     val counts = all.groupingBy { MediaType.from(it.kind) }.eachCount()
     val filtered = all.filter { w ->
         (state.type == null || (state.type == MEDIA && MediaType.from(w.kind) in MEDIA_KINDS) || MediaType.from(w.kind) == state.type) &&
@@ -94,6 +99,11 @@ fun LibraryScreen(session: AppSession, state: LibraryState, onOpen: (Route) -> U
                 IconButtonRound(Icons.Rounded.ViewList, "List view", { state.grid = false }, filled = !state.grid)
             }
         })
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip("Works", state.tab == 0, { state.tab = 0 })
+            FilterChip("Downloads", state.tab == 1, { state.tab = 1 }, count = state.downloads.desired?.count { it.state != "FULLY_SATISFIED" && it.state != "AVAILABLE" })
+        }
+        if (state.tab == 1) { DownloadsScreen(session, state.downloads, onOpen); return@Column }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip("Media", state.type == MEDIA, { state.type = MEDIA }, count = all.count { MediaType.from(it.kind) in MEDIA_KINDS }.takeIf { it > 0 })
             for (t in listOf(MediaType.MOVIE, MediaType.SERIES, MediaType.MUSIC, MediaType.BOOK, MediaType.PODCAST)) {

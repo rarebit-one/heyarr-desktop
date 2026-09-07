@@ -73,7 +73,8 @@ class McpModelsTest {
     @Test
     fun searchHitsReadWorksEpisodesAndArtwork() {
         val hits = SearchHitsJson.parse(Fixtures.searchContent("yellow", null))
-        assertEquals(listOf("Yellowstone"), hits.works.map { it.title })
+        // The fixture also carries the download-folder variant the scanner mints (heyarr-core#470).
+        assertEquals(listOf("Yellowstone", "Yellowstone Season 4 Mp4"), hits.works.map { it.title })
         assertEquals("/api/v1/blobs/${Fixtures.HASH}/content", hits.works[0].artworkPath)
         assertEquals(2018, hits.works[0].year)
         assertEquals(1, hits.episodes.size)

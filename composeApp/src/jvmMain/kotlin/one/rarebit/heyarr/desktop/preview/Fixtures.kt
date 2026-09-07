@@ -29,6 +29,7 @@ object Fixtures {
         work("w-blue", "music", "Blue", 1971, attrs = """{"artist":"Joni Mitchell"}"""),
         work("w-project-hail", "book", "Project Hail Mary", 2021, attrs = """{"author":"Andy Weir","narrator":"Ray Porter"}"""),
         work("w-cloudflare", "document", "Cloudflare Blog", null),
+        work("w-ys-s4", "series", "Yellowstone Season 4 Mp4", null),
     )
 
     fun worksList() = """{"items":[${works.joinToString(",")}],"next_cursor":null}"""
@@ -113,6 +114,12 @@ object Fixtures {
 
     val renderers = """{"renderers":[{"udn":"uuid:1e055177","name":"Phantom II 95 dB-a98d","manufacturer":"Devialet","model":"Phantom II 95 dB","location":"http://192.168.16.69:45317/x.xml"},{"udn":"uuid:tv","name":"Living room TV","manufacturer":"Samsung","model":"QN85BA 55"}]}"""
     val playback = """{"elapsed_seconds":1425,"duration_seconds":5520,"playing":true,"renderer":"Living room TV","state":"PLAYING","title":"Yellowstone — S04E02 Phantom Pain"}"""
+    val jobs = """{"items":[
+      {"id":"j1","type":"search_release","state":"succeeded","attempts":1,"last_error":null,"updated_at":"2026-09-07T20:41:10Z"},
+      {"id":"j2","type":"ingest_artifact","state":"running","attempts":1,"last_error":null,"updated_at":"2026-09-07T20:40:02Z"},
+      {"id":"j3","type":"probe_blob","state":"dead","attempts":5,"last_error":"ffprobe: moov atom not found","updated_at":"2026-09-07T19:12:44Z"},
+      {"id":"j4","type":"provider_health","state":"succeeded","attempts":1,"last_error":null,"updated_at":"2026-09-07T20:38:00Z"}
+    ]}"""
     val peers = """{"count":1,"truncated":false,"peers":[{"peer_id":"01a01df7-2472-7a96-b9d7-73da4e8a7355","name":"hyperion-1","site":"bartley-ridge","mode":"full","is_self":true}],"note":"More than one peer is supported and proven (M4), and so is exactly one: a single peer here is a deployment choice, not a symptom."}"""
     val replicas = """{"blob_hash":"$HASH","replicas":[{"peer":"hyperion-1","state":"present","verified":true}]}"""
     val externalIds = """{"external_ids":[{"source":"tvdb","value":"341164"},{"source":"imdb","value":"tt4236770"}]}"""
@@ -171,6 +178,7 @@ class FakeHeyarrTransport(private val delayMs: Long = 0) : HttpTransport {
             path == "quality-profiles" -> Fixtures.profiles
             path == "desired" -> Fixtures.desired
             path == "consumption/continue" -> Fixtures.continueRail
+            path == "jobs" -> Fixtures.jobs
             path == "session" -> """{"kind":"service","principal_id":"01a07aaf-da04-7e12-9228-cb645d86fc6c","scopes":["write"],"can_write":true,"management_authorized":false}"""
             path == "providers" -> """{"providers":[{"name":"linuxtracker","capabilities":["indexer"],"healthy":true,"detail":"reachable — Prowlarr","version":"unreported","checked_at":"2026-09-07T14:19:19Z"},{"name":"transmission","capabilities":["download"],"healthy":true,"detail":"reachable","version":"4.1.3","checked_at":"2026-09-07T14:19:19Z"},{"name":"internet-archive","capabilities":["indexer"],"healthy":false,"detail":"the indexer is rate limiting","checked_at":"2026-09-07T14:19:19Z"}],"capabilities":["indexer","download"]}"""
             path == "capabilities" -> """{"holders":[{"worker_id":"hyperion/19403/01a0723e","peer_id":"p1","peer_name":"hyperion-1","capabilities":[{"name":"download"},{"name":"ffmpeg"},{"name":"ffmpeg.encoder.h264"},{"name":"ffprobe"},{"name":"indexer"}],"expires_at":"2026-09-07T14:30:18Z"}],"available":["download","ffmpeg","ffmpeg.encoder.h264","ffprobe","indexer"]}"""
