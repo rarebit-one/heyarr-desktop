@@ -46,11 +46,16 @@ import one.rarebit.heyarr.desktop.ui.components.MediaRow
 import one.rarebit.heyarr.desktop.ui.components.SectionHeader
 import one.rarebit.heyarr.desktop.ui.components.icon
 
+/** A pseudo-kind for the default filter: the four media kinds, no feeds or documents. */
+val MEDIA = MediaType.UNKNOWN
+private val MEDIA_KINDS = setOf(MediaType.MOVIE, MediaType.SERIES, MediaType.MUSIC, MediaType.BOOK, MediaType.AUDIOBOOK, MediaType.PODCAST)
+
 class LibraryState {
     var works by mutableStateOf<List<Work>?>(null)
     var error by mutableStateOf<String?>(null)
     var loading by mutableStateOf(false)
-    var type by mutableStateOf<MediaType?>(null)
+    /** null = every kind; [MEDIA] = films, series, music, books (the default — feeds are the Archive, not the shelf). */
+    var type by mutableStateOf<MediaType?>(MEDIA)
     var status by mutableStateOf<LibraryStatus?>(null)
     var grid by mutableStateOf(true)
 }
@@ -76,7 +81,7 @@ fun LibraryScreen(session: AppSession, state: LibraryState, onOpen: (Route) -> U
     val all = state.works.orEmpty()
     val counts = all.groupingBy { MediaType.from(it.kind) }.eachCount()
     val filtered = all.filter { w ->
-        (state.type == null || MediaType.from(w.kind) == state.type) &&
+        (state.type == null || (state.type == MEDIA && MediaType.from(w.kind) in MEDIA_KINDS) || MediaType.from(w.kind) == state.type) &&
             (state.status == null || session.index.statusOf(w.id) == state.status)
     }
 
@@ -89,10 +94,12 @@ fun LibraryScreen(session: AppSession, state: LibraryState, onOpen: (Route) -> U
             }
         })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip("All", state.type == null, { state.type = null }, count = all.size.takeIf { it > 0 })
-            for (t in listOf(MediaType.MOVIE, MediaType.SERIES, MediaType.MUSIC, MediaType.BOOK, MediaType.PODCAST, MediaType.FEED, MediaType.UNKNOWN)) {
-                MediaScope(t) { FilterChip(t.plural, state.type == t, { state.type = if (state.type == t) null else t }, icon = t.icon(), count = counts[t]?.takeIf { it > 0 }) }
+            FilterChip("Media", state.type == MEDIA, { state.type = MEDIA }, count = all.count { MediaType.from(it.kind) in MEDIA_KINDS }.takeIf { it > 0 })
+            for (t in listOf(MediaType.MOVIE, MediaType.SERIES, MediaType.MUSIC, MediaType.BOOK, MediaType.PODCAST)) {
+                MediaScope(t) { FilterChip(t.plural, state.type == t, { state.type = if (state.type == t) MEDIA else t }, icon = t.icon(), count = counts[t]?.takeIf { it > 0 }) }
             }
+            MediaScope(MediaType.FEED) { FilterChip("Feeds", state.type == MediaType.FEED, { state.type = if (state.type == MediaType.FEED) MEDIA else MediaType.FEED }, icon = MediaType.FEED.icon(), count = counts[MediaType.FEED]?.takeIf { it > 0 }) }
+            FilterChip("Everything", state.type == null, { state.type = null }, count = all.size.takeIf { it > 0 })
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Status", style = MaterialTheme.typography.labelMedium, color = Tokens.textMuted)

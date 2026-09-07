@@ -226,8 +226,8 @@ fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: 
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (icon != null) Icon(icon, contentDescription = null, tint = if (selected) theme.accent else fg, modifier = Modifier.size(14.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, color = fg, maxLines = 1)
-        if (count != null) Text(count.toString(), style = MaterialTheme.typography.labelSmall, color = Tokens.textDisabled)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = fg, maxLines = 1, softWrap = false)
+        if (count != null) Text(count.toString(), style = MaterialTheme.typography.labelSmall, color = Tokens.textDisabled, maxLines = 1, softWrap = false)
     }
 }
 
