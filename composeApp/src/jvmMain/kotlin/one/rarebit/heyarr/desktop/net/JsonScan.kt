@@ -91,6 +91,22 @@ object JsonScan {
 
     fun intField(json: String, key: String): Int? = longField(json, key)?.toInt()
 
+    /** The first present, non-null top-level integer field among [keys]. */
+    fun firstInt(obj: String, keys: List<String>): Int? {
+        for (k in keys) intField(obj, k)?.let { return it }
+        return null
+    }
+
+    /** A top-level boolean field (`true`/`false`); null when absent, null, or not a bool. */
+    fun boolField(json: String, key: String): Boolean? {
+        val i = valueStart(json, key) ?: return null
+        return when {
+            json.startsWith("true", i) -> true
+            json.startsWith("false", i) -> false
+            else -> null
+        }
+    }
+
     /**
      * Index of the first char of the value for a **top-level** [key] (depth 1 of the
      * object slice), skipping `:` and whitespace; null when absent or `null`.
