@@ -68,7 +68,6 @@ import one.rarebit.heyarr.desktop.ui.components.ToastCard
 import one.rarebit.heyarr.desktop.ui.screens.DetailScreen
 import one.rarebit.heyarr.desktop.ui.screens.DetailState
 import one.rarebit.heyarr.desktop.ui.screens.Field
-import one.rarebit.heyarr.desktop.ui.screens.ForumScreen
 import one.rarebit.heyarr.desktop.ui.screens.HomeScreen
 import one.rarebit.heyarr.desktop.ui.screens.HomeState
 import one.rarebit.heyarr.desktop.ui.screens.LibraryScreen
@@ -77,6 +76,9 @@ import one.rarebit.heyarr.desktop.ui.screens.MissingScreen
 import one.rarebit.heyarr.desktop.ui.screens.MissingState
 import one.rarebit.heyarr.desktop.ui.screens.NowPlayingScreen
 import one.rarebit.heyarr.desktop.ui.screens.NowPlayingState
+import one.rarebit.heyarr.desktop.ui.screens.PlayerKeys
+import one.rarebit.heyarr.desktop.ui.screens.PlayerScreen
+import one.rarebit.heyarr.desktop.ui.screens.PlayerScreenState
 import one.rarebit.heyarr.desktop.ui.screens.SearchScreen
 import one.rarebit.heyarr.desktop.ui.screens.SettingsScreen
 import one.rarebit.heyarr.desktop.ui.screens.SettingsState
@@ -102,6 +104,10 @@ fun App(
     artworkLoader: ArtworkLoader? = null,
     /** Preview/test seam: a query typed into search on first composition. */
     initialQuery: String? = null,
+    /** Preview/test seam: open the connection sheet at once. */
+    initialConnectionSheet: Boolean = false,
+    /** Called when the player wants the window fullscreen (Main flips the WindowState placement). */
+    onFullscreen: (Boolean) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val session = remember { AppSession(settings, transport, player, OpenExternally(downloader, opener), scope, artworkLoader) }
@@ -113,9 +119,14 @@ fun App(
     val nowPlaying = remember { NowPlayingState() }
     val settingsState = remember { SettingsState() }
     val details = remember { mutableStateMapOf<String, DetailState>() }
+    val players = remember { mutableStateMapOf<String, PlayerScreenState>() }
+    var fullscreen by remember { mutableStateOf(false) }
+    fun setFullscreen(on: Boolean) { fullscreen = on; onFullscreen(on) }
     val searchFocus = remember { FocusRequester() }
     var focusSearchTick by remember { mutableStateOf(0) }
     var want by remember { mutableStateOf<WantRequest?>(null) }
+    var showConnection by remember { mutableStateOf(initialConnectionSheet) }
+    val connectionState = remember { ConnectionState() }
 
     LaunchedEffect(Unit) { session.startHeartbeat(); session.refreshIndex(); initialQuery?.let { search.updateQuery(it) } }
     LaunchedEffect(focusSearchTick) { if (focusSearchTick > 0) runCatching { searchFocus.requestFocus() } }
@@ -124,6 +135,7 @@ fun App(
     val current = nav.current
     val focusType = when (current) {
         is Route.Detail -> details[current.workId]?.detail?.work?.kind?.let { MediaType.from(it) } ?: current.typeHint
+        is Route.Player -> current.typeHint
         else -> MediaType.MOVIE
     }
     val shellTheme = if (session.appearance.adaptiveAccents) MediaThemes.of(focusType) else MediaThemes.default
@@ -135,6 +147,10 @@ fun App(
                 Modifier.fillMaxSize().background(Tokens.bgBase).onPreviewKeyEvent { e ->
                     if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     val mod = e.isCtrlPressed || e.isMetaPressed
+                    val playerState = (current as? Route.Player)?.let { players[it.workId + "/" + it.assetId] }
+                    if (playerState != null && !mod && want == null) {
+                        if (PlayerKeys.handle(e.key, playerState.player, { setFullscreen(!fullscreen) }, { if (fullscreen) setFullscreen(false); nav.back() }, fullscreen)) return@onPreviewKeyEvent true
+                    }
                     when {
                         mod && e.key == Key.K -> { openSearch(); true }
                         mod && e.key == Key.Comma -> { nav.go(Route.Settings); true }
@@ -143,6 +159,7 @@ fun App(
                         mod && e.key == Key.Three -> { nav.go(Route.Library); true }
                         mod && e.key == Key.Four -> { nav.go(Route.Missing); true }
                         mod && e.key == Key.Five -> { nav.go(Route.NowPlaying); true }
+                        e.key == Key.Escape && showConnection -> { showConnection = false; true }
                         e.key == Key.Escape && want != null -> { want = null; true }
                         e.key == Key.Escape && current is Route.Detail -> { nav.back(); true }
                         else -> false
@@ -152,9 +169,16 @@ fun App(
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     val compact = maxWidth < Tokens.compactBreakpoint
                     Row(Modifier.fillMaxSize()) {
-                        SideNav(current, onGo = { if (it == Route.Search) openSearch() else nav.go(it) }, connection = session.connection, compact = compact)
+                        if (!fullscreen) SideNav(
+                            current, onGo = { if (it == Route.Search) openSearch() else nav.go(it) }, connection = session.connection, compact = compact,
+                            connectionDetail = run {
+                                val host = session.config.baseUrl.removePrefix("https://").removePrefix("http://").substringBefore('/').substringBefore(':')
+                                session.lastLatencyMs?.let { "$it ms · $host" } ?: host.ifBlank { null }
+                            },
+                            onConnection = { showConnection = true },
+                        )
                         Column(Modifier.fillMaxSize()) {
-                            when (session.connection) {
+                            if (!fullscreen) when (session.connection) {
                                 Connection.OFFLINE -> OfflineBanner("Can't reach heyarr", session.config.baseUrl, onRetry = { scope.launch { session.probe() } }, onSettings = { nav.go(Route.Settings) })
                                 Connection.UNAUTHORIZED -> OfflineBanner("heyarr refused the token", "Check the bearer token in Settings.", onRetry = { scope.launch { session.probe() } }, onSettings = { nav.go(Route.Settings) })
                                 else -> {}
@@ -167,9 +191,9 @@ fun App(
                                 Route.Library -> LibraryScreen(session, library, nav::go, onWant)
                                 Route.Missing -> MissingScreen(session, missing, nav::go, onWantTitle = { want = WantRequest(null, "") })
                                 Route.NowPlaying -> NowPlayingScreen(session, nowPlaying)
-                                Route.Forum -> ForumScreen()
                                 Route.Settings -> SettingsScreen(session, settingsState, onSourcesChanged = { search.invalidateSources() })
                                 is Route.Detail -> DetailScreen(session, r, details.getOrPut(r.workId) { DetailState(r.workId) }, onBack = nav::back, onOpen = nav::go, onWant = onWant)
+                                is Route.Player -> PlayerScreen(session, players.getOrPut(r.workId + "/" + r.assetId) { PlayerScreenState(r) }, fullscreen = fullscreen, onFullscreen = ::setFullscreen, onBack = { if (fullscreen) setFullscreen(false); players.remove(r.workId + "/" + r.assetId); nav.back() }, onOpen = nav::go)
                             }
                         }
                     }
@@ -178,6 +202,7 @@ fun App(
                     for (t in session.toasts.takeLast(4)) ToastCard(t, onDismiss = { session.dismiss(t) })
                 }
                 want?.let { req -> WantSheet(session, req, onClose = { want = null }) }
+                if (showConnection) ConnectionSheet(session, connectionState, onClose = { showConnection = false }, onSettings = { nav.go(Route.Settings) })
             }
         }
     }

@@ -193,6 +193,30 @@ class HeyarrApi(
         parse = TracksJson::parse, cursor = TracksJson::nextCursor, what = "GET /works/{id}/assets",
     )
 
+    /**
+     * `POST /api/v1/desired` at **edition** scope — a want for ONE season (heyarr-core
+     * models the edition of an episodic work as its season, ADR-0056). There is no MCP
+     * tool for a scoped want; this REST route is the one the mobile client uses.
+     */
+    fun wantEdition(workId: String, editionId: String, qualityProfile: String, monitor: Boolean = true, reason: String? = null): McpResult<DesiredItem?> {
+        val body = one.rarebit.heyarr.desktop.mcp.JsonWrite.obj(linkedMapOf("scope" to "edition", "work_id" to workId, "edition_id" to editionId, "quality_profile" to qualityProfile, "monitor" to monitor, "reason" to reason))
+        val resp = try {
+            http.post("$baseUrl/api/v1/desired", body, "application/json", credential.asHeader())
+        } catch (e: IOException) { throw McpTransportException("heyarr is unreachable: ${e.message}", e) }
+        return when (resp.status) {
+            200, 201 -> McpResult.Ok(DesiredItemJson.parseOne(resp.body))
+            401, 403 -> throw McpTransportException("heyarr refused the credential (HTTP ${resp.status})", null, resp.status)
+            else -> McpResult.Refused(Problem.message(resp.body, resp.status, "want season"), "POST /desired", resp.status)
+        }
+    }
+
+    // ── telemetry (the connection sheet) ─────────────────────────────────────────
+    fun sessionInfo(): SessionInfo? = SessionInfoJson.parse(get("$baseUrl/api/v1/session", "GET /session"))
+    fun providers(): List<ProviderInfo> = ProviderJson.list(get("$baseUrl/api/v1/providers", "GET /providers"))
+    fun capabilities(): Capabilities = CapabilitiesJson.parse(get("$baseUrl/api/v1/capabilities", "GET /capabilities"))
+    fun libraries(): List<LibraryInfo> = LibraryInfoJson.list(get("$baseUrl/api/v1/libraries", "GET /libraries"))
+    fun jobs(limit: Int = 8): List<JobInfo> = JobJson.list(get("$baseUrl/api/v1/jobs?limit=$limit", "GET /jobs"))
+
     /** `GET /api/v1/consumption/continue` — the node's continue rail: the newest unfinished playback session per work (ADR-0075). */
     fun continueRail(limit: Int = 20): List<ContinueEntry> =
         ContinueJson.list(get("$baseUrl/api/v1/consumption/continue?limit=$limit", "GET /consumption/continue"))

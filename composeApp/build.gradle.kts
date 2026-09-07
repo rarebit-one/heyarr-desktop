@@ -29,6 +29,9 @@ kotlin {
                 // Material's extended icon set is the Compose analog of lucide-react: one
                 // dependency, vector icons, no font or CDN.
                 implementation(compose.materialIconsExtended)
+                // JNA only for Native.getComponentID: the X11 window id of the AWT canvas
+                // the embedded mpv renders into (--wid). No other native call.
+                implementation("net.java.dev.jna:jna:5.14.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
 
                 // ── Voidbind login (device/QR) — OPTIONAL, currently STUBBED ──────────
@@ -58,7 +61,7 @@ compose.desktop {
             // The bundled runtime is a jlink image: name every module the app reaches
             // beyond the defaults. java.net.http backs JdkHttpTransport / ArtworkLoader;
             // jdk.crypto.ec carries the TLS elliptic-curve suites heyarr's cert needs.
-            modules("java.net.http", "jdk.crypto.ec")
+            modules("java.net.http", "jdk.crypto.ec", "jdk.unsupported")
             // Linux packaging via jpackage. Declared (not run) here — `build` does not
             // package; `packageDeb` / `packageReleaseDeb` (and Rpm) would. AppImage is
             // NOT a jpackage format: it is produced out-of-band by wrapping the

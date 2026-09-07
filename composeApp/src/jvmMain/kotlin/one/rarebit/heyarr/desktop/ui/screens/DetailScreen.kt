@@ -134,6 +134,9 @@ class DetailState(val workId: String) {
     /** The asset a "Play on…" picker is open for, if any. */
     var castAssetId by mutableStateOf<String?>(null)
     var busy by mutableStateOf<String?>(null)
+    /** Set by the screen each composition: how to open the embedded player. */
+    var openPlayer: (Route.Player) -> Unit = {}
+    var wantMenu by mutableStateOf(false)
 }
 
 /**
@@ -173,6 +176,7 @@ fun DetailScreen(session: AppSession, route: Route.Detail, state: DetailState, o
             scope.launch { session.io { a.candidates(w.id) }.onSuccess { c -> state.candidates = state.candidates + (w.id to (c?.candidates ?: emptyList())) } }
         }
     }
+    state.openPlayer = { r -> onOpen(r) }
     LaunchedEffect(route.workId) { if (route.curate) state.tab = DetailTab.CURATE; load() }
     LaunchedEffect(wants.map { it.id }) { loadWants() }
     LaunchedEffect(detail?.primaryAsset?.blobHash) {
@@ -257,18 +261,12 @@ private fun TabSwitch(current: DetailTab, onSelect: (DetailTab) -> Unit) {
     }
 }
 
-/** Play a blob in mpv on this machine, reporting through toasts. */
-private fun playLocal(session: AppSession, state: DetailState, blobHash: String, label: String, scope: kotlinx.coroutines.CoroutineScope) {
-    scope.launch {
-        state.busy = "play"
-        val r = session.io { session.player.play(session.config.baseUrl, blobHash, session.config.bearerToken.trim()) }.getOrNull()
-        state.busy = null
-        when (r) {
-            is PlayResult.Launched -> session.toast(Toast.Kind.SUCCESS, "Playing in mpv", label)
-            is PlayResult.Failed -> session.toast(Toast.Kind.ERROR, "Couldn't play here", r.message)
-            null -> {}
-        }
-    }
+/** Open the embedded player on one asset of this work. */
+private fun playLocal(session: AppSession, state: DetailState, blobHash: String, label: String, scope: kotlinx.coroutines.CoroutineScope, assetId: String? = null, type: MediaType = MediaType.MOVIE, workTitle: String? = null) {
+    val id = assetId ?: state.assets?.firstOrNull { it.blobHash == blobHash }?.id ?: state.detail?.primaryAsset?.assetId ?: blobHash
+    val title = workTitle ?: state.detail?.work?.title ?: label
+    val sub = label.takeIf { it != title }?.removePrefix("$title — ")
+    state.openPlayer(Route.Player(state.workId, id, blobHash, title, sub, typeHint = type, from = "Back"))
 }
 
 @Composable
@@ -306,8 +304,8 @@ private fun DetailHero(session: AppSession, detail: WorkDetail, type: MediaType,
             kicker = cont?.let { "Continue · ${it.editionLabel ?: ""} ${it.progressLabel ?: ""}".trim() },
             primary = {
                 when {
-                    cont?.blobHash != null && type != MediaType.BOOK -> PrimaryButton("Continue", { playLocal(session, state, cont.blobHash, "${work.title} — ${cont.editionLabel ?: ""}", scope) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
-                    type == MediaType.SERIES && first != null -> PrimaryButton("Play ${first.code ?: ""}".trim(), { playLocal(session, state, first.asset.blobHash!!, Series.playTitle(work, first), scope) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
+                    cont?.blobHash != null && type != MediaType.BOOK -> PrimaryButton("Continue", { playLocal(session, state, cont.blobHash, "${work.title} — ${cont.editionLabel ?: ""}", scope, assetId = cont.assetId, type = type) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
+                    type == MediaType.SERIES && first != null -> PrimaryButton("Play ${first.code ?: ""}".trim(), { playLocal(session, state, first.asset.blobHash!!, Series.playTitle(work, first), scope, assetId = first.asset.id, type = type) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
                     asset == null && wants.isNotEmpty() -> PrimaryButton("Look for it", {
                         val a = session.api ?: return@PrimaryButton
                         val w = wants.first()
@@ -319,7 +317,7 @@ private fun DetailHero(session: AppSession, detail: WorkDetail, type: MediaType,
                     }, icon = Icons.Rounded.Search, enabled = state.busy == null)
                     asset == null -> PrimaryButton("Want", { onWant(work.id, work.title) }, icon = Icons.Rounded.Add, enabled = status == LibraryStatus.NOT_TRACKED)
                     type == MediaType.BOOK || type == MediaType.FEED -> PrimaryButton(theme.ctaLabel, ::openLocal, icon = if (type == MediaType.BOOK) Icons.Rounded.MenuBook else Icons.Rounded.OpenInNew, enabled = state.busy == null)
-                    else -> PrimaryButton(theme.ctaLabel, { playLocal(session, state, asset.blobHash, work.title, scope) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
+                    else -> PrimaryButton(theme.ctaLabel, { playLocal(session, state, asset.blobHash, work.title, scope, assetId = asset.assetId, type = type) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
                 }
             },
             secondary = {
@@ -383,10 +381,13 @@ private fun SeasonsBlock(session: AppSession, detail: WorkDetail, seasons: List<
     if (seasons.isEmpty()) { Notice("No episode files are held for this series yet.${if (wants.isNotEmpty()) " heyarr is looking — Curate → Releases shows what it found." else ""}"); return }
     val selected = seasons.firstOrNull { it.number == state.season } ?: seasons.first()
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        SectionHeader("Episodes", subtitle = "${selected.held} of ${selected.episodes.size} held${selected.gaps.takeIf { it.isNotEmpty() }?.let { " · ${it.size} not held" } ?: ""}")
+        SectionHeader("Episodes", subtitle = "${selected.held} of ${selected.episodes.size} held${selected.gaps.takeIf { it.isNotEmpty() }?.let { " · ${it.size} not held" } ?: ""}", trailing = {
+            SecondaryButton(if (state.wantMenu) "Close" else "Want more…", { state.wantMenu = !state.wantMenu }, icon = Icons.Rounded.Add, compact = true)
+        })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (s in seasons) FilterChip(s.label, s == selected, { state.season = s.number }, count = s.episodes.size)
         }
+        if (state.wantMenu) WantSeasonsPanel(session, detail, seasons, wants, state)
         val rows: List<Any> = buildList {
             val byNumber = selected.episodes.associateBy { it.number }
             val max = selected.episodes.mapNotNull { it.number }.maxOrNull() ?: 0
@@ -399,6 +400,64 @@ private fun SeasonsBlock(session: AppSession, detail: WorkDetail, seasons: List<
                 is Int -> MissingEpisodeRow(session, selected, row, wants, state)
             }
         }
+    }
+}
+
+/**
+ * Wanting more of a series, with the three scopes the node really has: one season
+ * (an edition-scope want — heyarr's edition of an episodic work IS its season), the
+ * whole series (a work-scope want), or a standing follow through TVDB that projects
+ * every episode as it airs and, with a full backfill, the back-catalogue too. Seasons
+ * the library has never seen have no edition to point at, so they come via the follow.
+ */
+@Composable
+private fun WantSeasonsPanel(session: AppSession, detail: WorkDetail, seasons: List<Season>, wants: List<DesiredItem>, state: DetailState) {
+    val scope = rememberCoroutineScope()
+    val profiles = session.profiles
+    var profile by remember(profiles) { mutableStateOf(profiles.firstOrNull { it.name == "living-room" }?.name ?: profiles.firstOrNull()?.name ?: "") }
+    val tvdb = state.externalIds.firstOrNull { it.source.equals("tvdb", true) }?.value
+    val wholeSeries = wants.any { it.scope == "work" }
+    Panel("Want more of ${detail.work.title}") {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Profile", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
+            for (p in profiles) FilterChip(p.name, profile == p.name, { profile = p.name })
+        }
+        Text("Seasons the library knows", style = MaterialTheme.typography.titleSmall, color = Tokens.textPrimary)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (s in seasons) {
+                val editionId = s.episodes.firstOrNull()?.asset?.editionId
+                val already = editionId != null && wants.any { it.scope == "edition" && it.editionId == editionId }
+                SecondaryButton(
+                    if (already) "${s.label} · wanted" else "Want ${s.label}${s.gaps.takeIf { it.isNotEmpty() }?.let { " (${it.size} missing)" } ?: ""}",
+                    {
+                        val a = session.api ?: return@SecondaryButton
+                        if (editionId == null) return@SecondaryButton
+                        scope.launch {
+                            session.io { a.wantEdition(detail.work.id, editionId, profile) }.onSuccess { r ->
+                                when (r) {
+                                    is McpResult.Ok -> { session.toast(Toast.Kind.SUCCESS, "Wanted ${s.label}", "Measured against $profile; heyarr will look for what this season is missing."); session.refreshIndex() }
+                                    is McpResult.Refused -> session.refused(r)
+                                }
+                            }
+                        }
+                    },
+                    icon = Icons.Rounded.Add, compact = true, enabled = editionId != null && !already && profile.isNotBlank(),
+                )
+            }
+        }
+        Text("Seasons the library has never seen have nothing to point a want at yet — they arrive through a follow.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+        Text("Everything", style = MaterialTheme.typography.titleSmall, color = Tokens.textPrimary)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton(if (wholeSeries) "Whole series · wanted" else "Want the whole series", {
+                val a = session.api ?: return@SecondaryButton
+                scope.launch { session.io { a.wantWork(detail.work.id, profile) }.onSuccess { r -> when (r) { is McpResult.Ok -> { session.toast(Toast.Kind.SUCCESS, "Wanted the whole series"); session.refreshIndex() }; is McpResult.Refused -> session.refused(r) } } }
+            }, icon = Icons.Rounded.Add, compact = true, enabled = !wholeSeries && profile.isNotBlank())
+            if (tvdb != null) SecondaryButton("Follow on TVDB (full back-catalogue)", {
+                val a = session.api ?: return@SecondaryButton
+                scope.launch { session.io { a.follow(null, tvdb, null, profile, backfill = "full", reason = "followed from the desktop") }.onSuccess { r -> when (r) { is McpResult.Ok -> session.toast(Toast.Kind.SUCCESS, "Following ${detail.work.title}", "Every episode, past and future, becomes a want."); is McpResult.Refused -> session.refused(r) } } }
+            }, icon = Icons.Rounded.Search, compact = true, enabled = profile.isNotBlank())
+        }
+        if (tvdb == null) Text("No TVDB id is recorded for this work, so a follow needs the TVDB URL — Settings → Followed sources.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
     }
 }
 
@@ -415,7 +474,7 @@ private fun EpisodeRow(session: AppSession, detail: WorkDetail, ep: Episode, sta
     Row(
         Modifier.fillMaxWidth().focusRing(interaction, shape).clip(shape)
             .background(if (hovered) Tokens.surface2 else Tokens.surface1, shape).border(Tokens.hairline, if (isContinue) theme.accent.copy(alpha = 0.6f) else Tokens.border, shape)
-            .clickable(interactionSource = interaction, indication = null, role = Role.Button, enabled = ep.isPlayable, onClick = { ep.asset.blobHash?.let { playLocal(session, state, it, Series.playTitle(detail.work, ep), scope) } })
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, enabled = ep.isPlayable, onClick = { ep.asset.blobHash?.let { playLocal(session, state, it, Series.playTitle(detail.work, ep), scope, assetId = ep.asset.id, type = MediaType.SERIES) } })
             .semantics { contentDescription = "${ep.label}${if (!ep.isPlayable) ", file missing" else ""}" }
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -451,7 +510,7 @@ private fun EpisodeRow(session: AppSession, detail: WorkDetail, ep: Episode, sta
         }
         if (ep.isPlayable) {
             IconButtonRound(Icons.Rounded.Cast, "Play ${ep.label} on a renderer", { toggleCast(session, state, ep.asset.id, scope) }, size = 34.dp)
-            IconButtonRound(Icons.Rounded.PlayArrow, "Play ${ep.label} here", { ep.asset.blobHash?.let { playLocal(session, state, it, Series.playTitle(detail.work, ep), scope) } }, size = 34.dp, filled = true, enabled = state.busy == null)
+            IconButtonRound(Icons.Rounded.PlayArrow, "Play ${ep.label}", { ep.asset.blobHash?.let { playLocal(session, state, it, Series.playTitle(detail.work, ep), scope, assetId = ep.asset.id, type = MediaType.SERIES) } }, size = 34.dp, filled = true, enabled = state.busy == null)
         }
     }
 }
@@ -501,7 +560,7 @@ private fun TracksBlock(session: AppSession, detail: WorkDetail, state: DetailSt
                 Text("%02d".format(i + 1), style = MaterialTheme.typography.labelMedium, color = theme.accentGradientEnd, modifier = Modifier.width(28.dp))
                 Text(t.title, style = MaterialTheme.typography.titleSmall, color = if (t.isPlayable) Tokens.textPrimary else Tokens.textDisabled, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 t.sizeBytes?.let { Text(PrimaryAsset.formatBytes(it), style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted) }
-                if (t.isPlayable) IconButtonRound(Icons.Rounded.PlayArrow, "Play ${t.title}", { t.blobHash?.let { playLocal(session, state, it, "${detail.work.title} — ${t.title}", scope) } }, size = 32.dp, filled = true)
+                if (t.isPlayable) IconButtonRound(Icons.Rounded.PlayArrow, "Play ${t.title}", { t.blobHash?.let { playLocal(session, state, it, "${detail.work.title} — ${t.title}", scope, assetId = t.id, type = MediaType.MUSIC) } }, size = 32.dp, filled = true)
             }
         }
     }

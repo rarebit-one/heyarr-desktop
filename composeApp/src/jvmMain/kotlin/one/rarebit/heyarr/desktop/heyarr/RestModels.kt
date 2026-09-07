@@ -33,6 +33,8 @@ object QualityProfileJson {
 data class DesiredItem(
     val id: String,
     val workId: String?,
+    val scope: String = "work",
+    val editionId: String? = null,
     val qualityProfileId: String?,
     val monitor: Boolean,
     val reason: String?,
@@ -59,6 +61,8 @@ object DesiredItemJson {
         return DesiredItem(
             id = id,
             workId = JsonScan.stringField(obj, "work_id"),
+            scope = JsonScan.stringField(obj, "scope") ?: "work",
+            editionId = JsonScan.stringField(obj, "edition_id"),
             qualityProfileId = JsonScan.stringField(obj, "quality_profile_id"),
             monitor = JsonScan.boolField(obj, "monitor") ?: true,
             reason = JsonScan.stringField(obj, "reason"),

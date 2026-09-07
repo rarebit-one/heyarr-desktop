@@ -66,6 +66,16 @@ class AppSession(
 
     var connection: Connection by mutableStateOf(if (config.bearerToken.isBlank()) Connection.UNCONFIGURED else Connection.UNKNOWN)
         private set
+    var lastLatencyMs: Long? by mutableStateOf(null)
+        private set
+    var lastOkAt: Long? by mutableStateOf(null)
+        private set
+    var lastFailure: String? by mutableStateOf(null)
+        private set
+    var probes: Int by mutableStateOf(0)
+        private set
+    var failures: Int by mutableStateOf(0)
+        private set
 
     var index: LibraryIndex by mutableStateOf(LibraryIndex.EMPTY)
         private set
@@ -105,16 +115,21 @@ class AppSession(
     suspend fun probe() {
         val a = api
         if (a == null) { connection = Connection.UNCONFIGURED; return }
+        val t0 = System.nanoTime()
         val ok = withContext(Dispatchers.IO) { runCatching { a.ping() }.getOrDefault(false) }
-        connection = if (ok) Connection.ONLINE else Connection.OFFLINE
+        probes++
+        lastLatencyMs = (System.nanoTime() - t0) / 1_000_000
+        if (ok) { lastOkAt = System.currentTimeMillis(); connection = Connection.ONLINE } else { failures++; connection = Connection.OFFLINE }
     }
 
     /** Called by any screen whose call died on the transport — flips the banner immediately. */
     fun noteTransportFailure(e: McpTransportException) {
+        failures++
+        lastFailure = e.message
         connection = if (e.status == 401 || e.status == 403) Connection.UNAUTHORIZED else Connection.OFFLINE
     }
 
-    fun noteSuccess() { if (connection != Connection.ONLINE) connection = Connection.ONLINE }
+    fun noteSuccess() { lastOkAt = System.currentTimeMillis(); if (connection != Connection.ONLINE) connection = Connection.ONLINE }
 
     // ── library index + profiles ─────────────────────────────────────────────────
 

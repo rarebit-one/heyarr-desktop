@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.rounded.Explore
-import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.ReportProblem
 import androidx.compose.material.icons.rounded.Search
@@ -59,7 +58,6 @@ val NAV_ITEMS = listOf(
     NavItem(Route.Library, "Library", Icons.Rounded.VideoLibrary, "⌃3"),
     NavItem(Route.Missing, "Missing", Icons.Rounded.ReportProblem, "⌃4"),
     NavItem(Route.NowPlaying, "Now playing", Icons.Rounded.Cast, "⌃5"),
-    NavItem(Route.Forum, "Forum", Icons.Rounded.Forum),
     NavItem(Route.Settings, "Settings", Icons.Rounded.Settings, "⌘,"),
 )
 
@@ -69,7 +67,7 @@ val NAV_ITEMS = listOf(
  * marked in the accent of the media currently in focus.
  */
 @Composable
-fun SideNav(current: Route, onGo: (Route) -> Unit, connection: Connection, compact: Boolean, modifier: Modifier = Modifier) {
+fun SideNav(current: Route, onGo: (Route) -> Unit, connection: Connection, compact: Boolean, modifier: Modifier = Modifier, connectionDetail: String? = null, onConnection: () -> Unit = {}) {
     val accent = LocalMediaTheme.current.accent
     Column(
         modifier.fillMaxHeight().width(if (compact) Tokens.navWidthCompact else Tokens.navWidth).background(Tokens.surface1).padding(vertical = 16.dp, horizontal = if (compact) 8.dp else 12.dp),
@@ -87,7 +85,7 @@ fun SideNav(current: Route, onGo: (Route) -> Unit, connection: Connection, compa
             NavRow(item, active, compact, accent) { onGo(item.route) }
         }
         Spacer(Modifier.weight(1f))
-        ConnectionDot(connection, compact)
+        ConnectionDot(connection, compact, connectionDetail, onConnection)
     }
 }
 
@@ -120,7 +118,7 @@ private fun NavRow(item: NavItem, active: Boolean, compact: Boolean, accent: Col
 }
 
 @Composable
-private fun ConnectionDot(connection: Connection, compact: Boolean) {
+private fun ConnectionDot(connection: Connection, compact: Boolean, detail: String?, onClick: () -> Unit) {
     val (tone, label) = when (connection) {
         Connection.ONLINE -> Tokens.success to "Connected"
         Connection.OFFLINE -> Tokens.danger to "Offline"
@@ -128,8 +126,22 @@ private fun ConnectionDot(connection: Connection, compact: Boolean) {
         Connection.UNCONFIGURED -> Tokens.textDisabled to "Not configured"
         Connection.UNKNOWN -> Tokens.textDisabled to "Connecting…"
     }
-    Row(Modifier.padding(horizontal = if (compact) 0.dp else 10.dp, vertical = 8.dp).semantics { this.contentDescription = "heyarr: $label" }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (compact) Arrangement.Center else Arrangement.spacedBy(8.dp)) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val shape = RoundedCornerShape(Tokens.radiusButton)
+    Row(
+        Modifier.fillMaxWidth().focusRing(interaction, shape).clip(shape)
+            .background(if (hovered) Tokens.surface2 else Color.Transparent, shape)
+            .hoverable(interaction)
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+            .semantics { this.contentDescription = "heyarr connection: $label. Open connection details" }
+            .padding(horizontal = if (compact) 0.dp else 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (compact) Arrangement.Center else Arrangement.spacedBy(8.dp),
+    ) {
         Box(Modifier.size(8.dp).background(tone, CircleShape).border(Tokens.hairline, tone.copy(alpha = 0.4f), CircleShape))
-        if (!compact) Text(label, style = MaterialTheme.typography.labelMedium, color = Tokens.textMuted)
+        if (!compact) Column {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = Tokens.textPrimary)
+            if (detail != null) Text(detail, style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted, maxLines = 1)
+        }
     }
 }

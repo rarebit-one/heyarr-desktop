@@ -16,8 +16,12 @@ sealed interface Route {
     data object Library : Route
     data object Missing : Route
     data object NowPlaying : Route
-    data object Forum : Route
     data object Settings : Route
+
+    /** The embedded player: one asset of a work, with the work's other episodes as "up next". */
+    data class Player(val workId: String, val assetId: String, val blobHash: String, val title: String, val subtitle: String? = null, val typeHint: MediaType = MediaType.MOVIE, val from: String = "Library") : Route {
+        override val section: String get() = from
+    }
 
     /** The adaptive detail template for one work. [typeHint]/[titleHint] paint the screen before the fetch lands. */
     data class Detail(val workId: String, val typeHint: MediaType = MediaType.UNKNOWN, val titleHint: String? = null, val from: String = "Library", val curate: Boolean = false) : Route {
@@ -35,7 +39,8 @@ class Nav(start: Route = Route.Home) {
 
     fun go(route: Route) {
         if (route == current) return
-        if (route !is Route.Detail) stack.removeAll { it !is Route.Detail && it.section == route.section }
+        if (route is Route.Player) stack.removeAll { it is Route.Player }
+        else if (route !is Route.Detail) stack.removeAll { it !is Route.Detail && it !is Route.Player && it.section == route.section }
         stack.add(route)
         current = route
     }
