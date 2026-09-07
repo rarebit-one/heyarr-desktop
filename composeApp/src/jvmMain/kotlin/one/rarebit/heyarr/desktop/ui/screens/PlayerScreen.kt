@@ -73,6 +73,7 @@ import one.rarebit.heyarr.desktop.state.Toast
 import one.rarebit.heyarr.desktop.state.rememberArtwork
 import one.rarebit.heyarr.desktop.theme.LocalMediaTheme
 import one.rarebit.heyarr.desktop.theme.MediaScope
+import one.rarebit.heyarr.desktop.theme.MediaThemes
 import one.rarebit.heyarr.desktop.theme.MediaType
 import one.rarebit.heyarr.desktop.theme.Tokens
 import one.rarebit.heyarr.desktop.ui.Route
@@ -186,8 +187,12 @@ fun PlayerScreen(session: AppSession, state: PlayerScreenState, fullscreen: Bool
                         if (state.popout) { state.popout = false; state.started = false } // the surface re-creates and re-embeds
                         else {
                             state.popout = true
-                            val err = session.io { p.switchWindow(null) }.getOrNull()
-                            if (err != null) session.toast(Toast.Kind.ERROR, "Couldn't pop out", err)
+                            val accent = accentHex(MediaThemes.of(route.typeHint).accent)
+                            val err = session.io {
+                                if (p.isRunning) p.switchWindow(null)
+                                else p.start(null, HeyarrApi.blobUrl(session.config.baseUrl, route.blobHash), session.config.bearerToken.trim(), route.title + (route.subtitle?.let { " — $it" } ?: ""), accent)
+                            }.getOrNull()
+                            if (err != null) { session.toast(Toast.Kind.ERROR, "Couldn't pop out", err); state.popout = false; state.started = false }
                         }
                     }
                 }, icon = if (state.popout) Icons.Rounded.Fullscreen else Icons.Rounded.OpenInNew)
@@ -287,7 +292,7 @@ private fun VideoSurface(session: AppSession, state: PlayerScreenState, onToggle
         val resuming = state.player.isRunning
         val err = session.io {
             if (resuming) state.player.switchWindow(wid)
-            else state.player.start(wid, HeyarrApi.blobUrl(session.config.baseUrl, route.blobHash), session.config.bearerToken.trim(), route.title + (route.subtitle?.let { " — $it" } ?: ""))
+            else state.player.start(wid, HeyarrApi.blobUrl(session.config.baseUrl, route.blobHash), session.config.bearerToken.trim(), route.title + (route.subtitle?.let { " — $it" } ?: ""), accentHex(MediaThemes.of(route.typeHint).accent))
         }.getOrNull()
         state.started = true
         state.startError = err
@@ -439,6 +444,9 @@ private fun UpNext(session: AppSession, state: PlayerScreenState, route: Route.P
         }
     }
 }
+
+/** `#RRGGBB` for mpv's OSC options. */
+internal fun accentHex(c: Color): String = "#%02X%02X%02X".format((c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
 
 internal fun clock(s: Double): String {
     val t = s.toLong().coerceAtLeast(0)

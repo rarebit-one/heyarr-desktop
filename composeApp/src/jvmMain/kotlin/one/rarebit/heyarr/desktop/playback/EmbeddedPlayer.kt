@@ -84,6 +84,7 @@ class EmbeddedPlayer(
     private var lastUrl: String? = null
     private var lastToken: String? = null
     private var lastTitle: String? = null
+    private var lastAccent: String = "#00935E"
 
     /**
      * Spawn mpv and load [url]. With a [wid] mpv renders into that X11 window (the
@@ -91,11 +92,11 @@ class EmbeddedPlayer(
      * OSC so that window is usable on its own, while the app's transport still drives
      * it over the same socket. Returns null on success, else a UI-safe reason.
      */
-    fun start(wid: Long?, url: String, token: String, title: String): String? {
+    fun start(wid: Long?, url: String, token: String, title: String, accentHex: String = "#00935E"): String? {
         close()
         closed = false
         poppedOut = wid == null
-        lastUrl = url; lastToken = token; lastTitle = title
+        lastUrl = url; lastToken = token; lastTitle = title; lastAccent = accentHex
         val sock = File(System.getProperty("java.io.tmpdir"), "heyarr-mpv-${ProcessHandle.current().pid()}-${System.nanoTime()}.sock")
         socketPath = sock
         val argv = buildList {
@@ -115,8 +116,8 @@ class EmbeddedPlayer(
         }
         exited = false
         process = try { spawn(argv) } catch (e: IOException) { return "mpv could not be started — is it installed and on PATH?" }
-        // The socket appears once mpv is up; give it a few seconds.
-        val deadline = System.currentTimeMillis() + 4000
+        // The socket appears once mpv is up; a window under XWayland can take a moment.
+        val deadline = System.currentTimeMillis() + 12_000
         var ch: SocketChannel? = null
         while (System.currentTimeMillis() < deadline && ch == null) {
             if (process?.isAlive != true) return "mpv exited before it opened its control socket."
@@ -149,7 +150,7 @@ class EmbeddedPlayer(
         val token = lastToken ?: return "nothing is playing"
         val title = lastTitle ?: ""
         val resume = state.copy()
-        val err = start(wid, url, token, title) ?: run {
+        val err = start(wid, url, token, title, lastAccent) ?: run {
             if (resume.position > 1.0) send("set_property", "start", resume.position.toString())
             send("set_property", "volume", resume.volume)
             send("set_property", "mute", resume.muted)
@@ -224,6 +225,36 @@ class EmbeddedPlayer(
 
     /** Where playback was when mpv went away, for the re-embed. */
     val resumePosition: Double? get() = resumeAt
+
+    /** mpv's on-screen controller in the app's colours: near-black bar, warm text, the media accent on the seek position. */
+    private fun oscStyle(accentHex: String): String = listOf(
+        "osc-layout=bottombar", "osc-seekbarstyle=bar", "osc-boxalpha=40", "osc-scalewindowed=1.1", "osc-scalefullscreen=1.1",
+        "osc-hidetimeout=1600", "osc-scrollcontrols=no", "osc-timetotal=yes",
+        "osc-background_color=#131116", "osc-timecode_color=#A09F9D", "osc-title_color=#F5F5F4", "osc-buttons_color=#F5F5F4",
+        "osc-top_buttons_color=#A09F9D", "osc-small_buttonsL_color=#F5F5F4", "osc-small_buttonsR_color=#F5F5F4",
+        "osc-time_pos_color=$accentHex", "osc-held_element_color=$accentHex",
+    ).joinToString(",")
+
+    /**
+     * Key bindings for the pop-out: mpv's defaults plus a horizontal wheel that follows
+     * natural scrolling (a two-finger swipe to the right moves forward), and a wheel
+     * over the picture that seeks rather than changes volume.
+     */
+    private fun inputConf(): File {
+        val f = File(System.getProperty("java.io.tmpdir"), "heyarr-mpv-input.conf")
+        f.writeText(
+            """
+            WHEEL_LEFT  seek 5
+            WHEEL_RIGHT seek -5
+            WHEEL_UP    seek 10
+            WHEEL_DOWN  seek -10
+            SPACE       cycle pause
+            f           cycle fullscreen
+            ESC         set fullscreen no
+            """.trimIndent() + "\n",
+        )
+        return f
+    }
 
     companion object {
         /** Properties observed in order; the index+1 is the observer id. */
