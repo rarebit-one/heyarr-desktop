@@ -62,8 +62,8 @@ object Tokens {
     val hairline: Dp = 1.dp
 
     // Layout.
-    val navWidth: Dp = 220.dp
-    val navWidthCompact: Dp = 64.dp
+    val navWidth: Dp = 92.dp
+    val navWidthCompact: Dp = 92.dp
     val compactBreakpoint: Dp = 900.dp
     val posterWidth: Dp = 160.dp
     val posterWidthCompact: Dp = 132.dp

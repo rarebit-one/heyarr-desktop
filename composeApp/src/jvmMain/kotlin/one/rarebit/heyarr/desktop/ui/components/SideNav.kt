@@ -9,7 +9,6 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,7 +41,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import one.rarebit.heyarr.desktop.state.Connection
 import one.rarebit.heyarr.desktop.theme.LocalMediaTheme
 import one.rarebit.heyarr.desktop.theme.Tokens
@@ -57,91 +59,83 @@ val NAV_ITEMS = listOf(
     NavItem(Route.Search, "Search", Icons.Rounded.Search, "⌘K"),
     NavItem(Route.Library, "Library", Icons.Rounded.VideoLibrary, "⌃3"),
     NavItem(Route.Missing, "Missing", Icons.Rounded.ReportProblem, "⌃4"),
-    NavItem(Route.NowPlaying, "Now playing", Icons.Rounded.Cast, "⌃5"),
+    NavItem(Route.NowPlaying, "Cast", Icons.Rounded.Cast, "⌃5"),
     NavItem(Route.Settings, "Settings", Icons.Rounded.Settings, "⌘,"),
 )
 
+/** The rail's uppercase caption style: small sans, tracked. */
+private val RAIL_LABEL = androidx.compose.ui.text.TextStyle(fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.9.sp, lineHeight = 12.sp)
+
 /**
- * The left navigation. Full width shows labels and shortcuts; the compact form (small
- * windows) is icon-only with the label as its accessible name. The active item is
- * marked in the accent of the media currently in focus.
+ * The left rail: a logo, then each destination as an icon over an uppercase caption,
+ * and the connection at the foot. One width at every window size. The active item
+ * gets a tinted tile in the accent of the media in focus.
  */
 @Composable
-fun SideNav(current: Route, onGo: (Route) -> Unit, connection: Connection, compact: Boolean, modifier: Modifier = Modifier, connectionDetail: String? = null, onConnection: () -> Unit = {}) {
-    val accent = LocalMediaTheme.current.accent
+fun SideNav(current: Route, onGo: (Route) -> Unit, connection: Connection, compact: Boolean = false, modifier: Modifier = Modifier, connectionDetail: String? = null, onConnection: () -> Unit = {}) {
+    val theme = LocalMediaTheme.current
     Column(
-        modifier.fillMaxHeight().width(if (compact) Tokens.navWidthCompact else Tokens.navWidth).background(Tokens.surface1).padding(vertical = 16.dp, horizontal = if (compact) 8.dp else 12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier.fillMaxHeight().width(Tokens.navWidth).background(Tokens.surface1).padding(vertical = 14.dp, horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Row(Modifier.padding(horizontal = if (compact) 4.dp else 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.size(28.dp).background(Brush.linearGradient(listOf(accent, LocalMediaTheme.current.accentGradientEnd)), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-                Text("h", style = MaterialTheme.typography.headlineSmall, color = Tokens.bgBase)
-            }
-            if (!compact) Text("heyarr", style = MaterialTheme.typography.headlineSmall, color = Tokens.textPrimary)
+        Box(Modifier.size(40.dp).background(Brush.linearGradient(listOf(theme.ctaGradientStart, theme.accentGradientEnd)), RoundedCornerShape(11.dp)), contentAlignment = Alignment.Center) {
+            Text("h", style = MaterialTheme.typography.headlineMedium, color = theme.onAccent)
         }
-        Spacer(Modifier.height(8.dp))
-        for (item in NAV_ITEMS) {
-            val active = current.section == item.route.section
-            NavRow(item, active, compact, accent) { onGo(item.route) }
-        }
+        Spacer(Modifier.height(14.dp))
+        for (item in NAV_ITEMS) RailItem(item, active = current.section == item.route.section, accent = theme.accent, accentEnd = theme.accentGradientEnd) { onGo(item.route) }
         Spacer(Modifier.weight(1f))
-        ConnectionDot(connection, compact, connectionDetail, onConnection)
+        ConnectionTile(connection, connectionDetail, onConnection)
     }
 }
 
 @Composable
-private fun NavRow(item: NavItem, active: Boolean, compact: Boolean, accent: Color, onClick: () -> Unit) {
+private fun RailItem(item: NavItem, active: Boolean, accent: Color, accentEnd: Color, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    val shape = RoundedCornerShape(Tokens.radiusButton)
-    val bg = when { active -> accent.copy(alpha = 0.16f); hovered -> Tokens.surface2; else -> Color.Transparent }
-    val fg = if (active) Tokens.textPrimary else Tokens.textMuted
-    Row(
+    val shape = RoundedCornerShape(10.dp)
+    val tile = when { active -> accent.copy(alpha = 0.18f); hovered -> Tokens.surface2; else -> Color.Transparent }
+    val fg = when { active -> accentEnd; hovered -> Tokens.textPrimary; else -> Tokens.textMuted }
+    Column(
         Modifier.fillMaxWidth()
-            .focusRing(interaction, shape)
-            .clip(shape)
-            .background(bg, shape)
+            .focusRing(interaction, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
             .hoverable(interaction)
             .clickable(interactionSource = interaction, indication = null, role = Role.Tab, onClick = onClick)
-            .semantics { this.contentDescription = item.label + if (active) ", current" else "" }
-            .padding(horizontal = if (compact) 0.dp else 10.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = if (compact) Arrangement.Center else Arrangement.spacedBy(10.dp),
+            .semantics { this.contentDescription = item.label + if (active) ", current" else "" + (item.hint?.let { " ($it)" } ?: "") }
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (active) Box(Modifier.width(3.dp).height(18.dp).background(accent, CircleShape)) else if (!compact) Spacer(Modifier.width(3.dp))
-        Icon(item.icon, contentDescription = null, tint = if (active) accent else fg, modifier = Modifier.size(20.dp))
-        if (!compact) {
-            Text(item.label, style = MaterialTheme.typography.labelLarge, color = fg, modifier = Modifier.weight(1f))
-            if (item.hint != null && (hovered || active)) Kbd(item.hint)
+        Box(Modifier.size(44.dp).background(tile, shape).border(Tokens.hairline, if (active) accent.copy(alpha = 0.45f) else Color.Transparent, shape), contentAlignment = Alignment.Center) {
+            Icon(item.icon, contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
         }
+        Text(item.label.uppercase(), style = RAIL_LABEL, color = if (active) accentEnd else Tokens.textMuted, textAlign = TextAlign.Center, maxLines = 1, softWrap = false)
     }
 }
 
 @Composable
-private fun ConnectionDot(connection: Connection, compact: Boolean, detail: String?, onClick: () -> Unit) {
+private fun ConnectionTile(connection: Connection, detail: String?, onClick: () -> Unit) {
     val (tone, label) = when (connection) {
-        Connection.ONLINE -> Tokens.success to "Connected"
+        Connection.ONLINE -> Tokens.success to "Online"
         Connection.OFFLINE -> Tokens.danger to "Offline"
-        Connection.UNAUTHORIZED -> Tokens.warning to "Token refused"
-        Connection.UNCONFIGURED -> Tokens.textDisabled to "Not configured"
-        Connection.UNKNOWN -> Tokens.textDisabled to "Connecting…"
+        Connection.UNAUTHORIZED -> Tokens.warning to "Refused"
+        Connection.UNCONFIGURED -> Tokens.textDisabled to "Set up"
+        Connection.UNKNOWN -> Tokens.textDisabled to "Connecting"
     }
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    val shape = RoundedCornerShape(Tokens.radiusButton)
-    Row(
-        Modifier.fillMaxWidth().focusRing(interaction, shape).clip(shape)
-            .background(if (hovered) Tokens.surface2 else Color.Transparent, shape)
+    Column(
+        Modifier.fillMaxWidth().focusRing(interaction, RoundedCornerShape(12.dp)).clip(RoundedCornerShape(12.dp))
+            .background(if (hovered) Tokens.surface2 else Color.Transparent, RoundedCornerShape(12.dp))
             .hoverable(interaction)
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
-            .semantics { this.contentDescription = "heyarr connection: $label. Open connection details" }
-            .padding(horizontal = if (compact) 0.dp else 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (compact) Arrangement.Center else Arrangement.spacedBy(8.dp),
+            .semantics { this.contentDescription = "heyarr connection: $label${detail?.let { ", $it" } ?: ""}. Open connection details" }
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Box(Modifier.size(8.dp).background(tone, CircleShape).border(Tokens.hairline, tone.copy(alpha = 0.4f), CircleShape))
-        if (!compact) Column {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = Tokens.textPrimary)
-            if (detail != null) Text(detail, style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted, maxLines = 1)
+        Box(Modifier.size(36.dp).background(Tokens.surface2, CircleShape).border(Tokens.hairline, tone.copy(alpha = 0.6f), CircleShape), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(10.dp).background(tone, CircleShape))
         }
+        Text(label.uppercase(), style = RAIL_LABEL, color = tone, maxLines = 1, softWrap = false)
+        if (detail != null) Text(detail.substringBefore(" ·"), style = RAIL_LABEL.copy(letterSpacing = 0.2.sp, fontWeight = FontWeight.Normal), color = Tokens.textDisabled, maxLines = 1, softWrap = false)
     }
 }

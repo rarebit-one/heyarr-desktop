@@ -77,6 +77,10 @@ class EmbeddedPlayer(
     /** True when mpv runs in its own window rather than inside the app. */
     var poppedOut: Boolean = false
         private set
+    /** Set when mpv went away on its own (the pop-out window was closed): the screen re-embeds and resumes. */
+    var exited: Boolean by mutableStateOf(false)
+        private set
+    private var resumeAt: Double? = null
     private var lastUrl: String? = null
     private var lastToken: String? = null
     private var lastTitle: String? = null
@@ -100,11 +104,16 @@ class EmbeddedPlayer(
             add("--input-ipc-server=${sock.absolutePath}")
             addAll(listOf("--idle=yes", "--force-window=yes", "--keep-open=yes", "--cursor-autohide=no", "--no-terminal", "--msg-level=all=error"))
             if (wid != null) addAll(listOf("--osc=no", "--osd-level=0", "--osd-bar=no", "--input-default-bindings=no", "--input-vo-keyboard=no"))
-            else addAll(listOf("--osc=yes", "--input-default-bindings=yes", "--geometry=60%"))
+            // The pop-out is picture only: the app's transport is the one UI in either mode.
+            // Keyboard bindings stay on so the window answers space / arrows / f on its own.
+            else addAll(listOf("--osc=no", "--osd-level=1", "--osd-bar=no", "--input-default-bindings=yes", "--input-vo-keyboard=yes", "--geometry=60%"))
+            resumeAt?.let { if (it > 1.0) add("--start=$it") }
+            resumeAt = null
             add("--http-header-fields=Authorization: Bearer $token")
             add("--title=$title")
             add(url)
         }
+        exited = false
         process = try { spawn(argv) } catch (e: IOException) { return "mpv could not be started — is it installed and on PATH?" }
         // The socket appears once mpv is up; give it a few seconds.
         val deadline = System.currentTimeMillis() + 4000
@@ -189,7 +198,7 @@ class EmbeddedPlayer(
         val buf = ByteBuffer.allocate(64 * 1024)
         val pending = StringBuilder()
         try {
-            while (!closed && ch.read(buf).also { if (it < 0) return } >= 0) {
+            while (!closed && ch.read(buf).also { if (it < 0) { onGone(); return } } >= 0) {
                 buf.flip()
                 pending.append(StandardCharsets.UTF_8.decode(buf))
                 buf.clear()
@@ -201,9 +210,20 @@ class EmbeddedPlayer(
                 }
             }
         } catch (e: IOException) {
-            if (!closed) state = state.copy(error = "mpv went away")
+            if (!closed) onGone()
         }
     }
+
+    /** mpv closed its end (the user shut the pop-out, or it crashed): remember where it was. */
+    private fun onGone() {
+        if (closed) return
+        resumeAt = state.position
+        state = state.copy(error = null)
+        exited = true
+    }
+
+    /** Where playback was when mpv went away, for the re-embed. */
+    val resumePosition: Double? get() = resumeAt
 
     companion object {
         /** Properties observed in order; the index+1 is the observer id. */

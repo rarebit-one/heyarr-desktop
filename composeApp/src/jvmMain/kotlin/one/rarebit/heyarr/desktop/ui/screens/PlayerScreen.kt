@@ -155,6 +155,11 @@ fun PlayerScreen(session: AppSession, state: PlayerScreenState, fullscreen: Bool
         val a = session.api ?: return@LaunchedEffect
         session.io { a.assets(route.workId) }.onSuccess { list -> state.episodes = Series.seasons(list).flatMap { it.episodes } }
     }
+    // The pop-out window was closed (or mpv died): come back inside and resume where it was.
+    LaunchedEffect(p.exited) {
+        if (p.exited && state.popout) { state.popout = false; state.started = false }
+        else if (p.exited && !state.popout && state.started) { state.started = false }
+    }
     // Auto-hide the controls in fullscreen while playing.
     LaunchedEffect(fullscreen, ps.paused, state.controlsVisible) {
         if (fullscreen && !ps.paused && state.controlsVisible) { delay(3500); state.controlsVisible = false }
