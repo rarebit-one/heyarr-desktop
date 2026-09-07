@@ -1,0 +1,86 @@
+#!/bin/bash
+# Run a command inside heyarr-desktop's devcontainer from this laptop.
+# Usage: scripts/devcontainer-exec <command> [args...]
+# Example: scripts/devcontainer-exec ./gradlew build
+#
+# Nothing builds or runs on the laptop: the working tree is rsynced to the
+# container host (mac-mini-1 / lamia-1 by default), the command runs inside the
+# devcontainer there, and build outputs worth keeping (test reports,
+# screenshots, distributables) are synced back. Modelled on heyarr-core's
+# scripts/devcontainer-exec; worktree-aware in the simple sense that whichever
+# checkout you run it from is the tree that gets synced.
+#
+# Env (optional):
+#   DEVCONTAINER_REMOTE_HOST      default mac-mini-1
+#   DEVCONTAINER_REMOTE_PATH      default ~/Workspace/rarebit-one/heyarr-desktop
+#   DEVCONTAINER_REMOTE_PATHDIRS  default /opt/homebrew/bin:/opt/podman/bin
+#   DEVCONTAINER_LOCAL=1          run the container half directly (on the host)
+#   DEVCONTAINER_NO_PULL=1        skip syncing results back
+set -e
+
+# The remote copy arrives by rsync without its .git, so the SSH-through leg passes the
+# absolute root explicitly; the laptop half derives it from the checkout it runs in.
+if [[ -n "${DEVCONTAINER_PROJECT_ROOT:-}" ]]; then
+  PROJECT_ROOT="$DEVCONTAINER_PROJECT_ROOT"
+else
+  PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "ERROR: not in a git repository" >&2; exit 1; }
+fi
+[[ $# -eq 0 ]] && { echo "Usage: scripts/devcontainer-exec <command> [args...]" >&2; exit 1; }
+
+# Never ship the VCS dir, Gradle/Kotlin caches or build trees across the wire.
+PUSH_EXCLUDES=(--exclude='.git' --exclude='.worktrees' --exclude='.gradle' --exclude='.kotlin' --exclude='build' --exclude='.idea')
+# Pull back only what a developer wants to look at locally.
+PULL_INCLUDES=(--include='*/' --include='build/reports/***' --include='build/screenshots/***' --include='build/compose/binaries/***' --exclude='*')
+
+if [[ "${DEVCONTAINER_LOCAL:-}" != "1" && "${DEVCONTAINER_SSH_THROUGH:-}" != "1" ]]; then
+  REMOTE_HOST="${DEVCONTAINER_REMOTE_HOST:-mac-mini-1}"
+  REMOTE_PATH="${DEVCONTAINER_REMOTE_PATH:-~/Workspace/rarebit-one/heyarr-desktop}"
+  REMOTE_PATHDIRS="${DEVCONTAINER_REMOTE_PATHDIRS:-/opt/homebrew/bin:/opt/podman/bin}"
+  SSH_TRANSPORT="ssh -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3"
+
+  if [[ "$REMOTE_PATH" == "~/"* || "$REMOTE_PATH" == '$HOME/'* ]]; then
+    REMOTE_HOME=$($SSH_TRANSPORT "$REMOTE_HOST" 'printf %s "$HOME"')
+    [[ -z "$REMOTE_HOME" ]] && { echo "ERROR: could not resolve remote home on $REMOTE_HOST" >&2; exit 1; }
+    REMOTE_PATH="${REMOTE_HOME}/${REMOTE_PATH#*/}"
+  fi
+
+  ESCAPED_ARGS=()
+  for arg in "$@"; do ESCAPED_ARGS+=("$(printf '%q' "$arg")"); done
+
+  echo "📡 Syncing to ${REMOTE_HOST}..." >&2
+  $SSH_TRANSPORT "$REMOTE_HOST" "mkdir -p \"${REMOTE_PATH}\""
+  rsync -az --delete --timeout=30 -e "$SSH_TRANSPORT" "${PUSH_EXCLUDES[@]}" "${PROJECT_ROOT}/" "${REMOTE_HOST}:${REMOTE_PATH}/"
+
+  echo "🔗 Running on ${REMOTE_HOST}..." >&2
+  SSH_OPTS=(-o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3)
+  [[ -t 0 && -t 1 ]] && SSH_OPTS+=(-tt)
+  EXIT_CODE=0
+  ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" \
+    "cd ${REMOTE_PATH} && PATH=${REMOTE_PATHDIRS}:\$PATH DEVCONTAINER_SSH_THROUGH=1 DEVCONTAINER_PROJECT_ROOT=${REMOTE_PATH} ${REMOTE_PATH}/scripts/devcontainer-exec ${ESCAPED_ARGS[*]}" \
+    || EXIT_CODE=$?
+
+  if [[ "${DEVCONTAINER_NO_PULL:-}" != "1" ]]; then
+    rsync -az --timeout=30 -e "$SSH_TRANSPORT" "${PULL_INCLUDES[@]}" "${REMOTE_HOST}:${REMOTE_PATH}/composeApp/" "${PROJECT_ROOT}/composeApp/" || true
+  fi
+  exit "$EXIT_CODE"
+fi
+
+# ---- container host half ----
+command -v podman >/dev/null || { echo "ERROR: podman not found on $(hostname)" >&2; exit 1; }
+CONTAINER=$(podman ps -q --filter "label=devcontainer.local_folder=${PROJECT_ROOT}" | head -1)
+if [[ -z "$CONTAINER" ]]; then
+  echo "Container not running. Starting devcontainer..." >&2
+  devcontainer up --docker-path podman --workspace-folder "$PROJECT_ROOT" >&2 || exit 1
+  for i in {1..30}; do
+    CONTAINER=$(podman ps -q --filter "label=devcontainer.local_folder=${PROJECT_ROOT}" | head -1)
+    [[ -n "$CONTAINER" ]] && break; sleep 2
+  done
+  [[ -z "$CONTAINER" ]] && { echo "ERROR: timed out waiting for container" >&2; exit 1; }
+fi
+WORKDIR="/workspaces/$(basename "$PROJECT_ROOT")"
+EXEC_CMD=(podman exec -w "$WORKDIR")
+if [[ -t 0 && -t 1 ]]; then EXEC_CMD+=(-it); elif [[ -t 0 ]]; then EXEC_CMD+=(-i); elif [[ -t 1 ]]; then EXEC_CMD+=(-t); fi
+# Optional live-node credentials for the smoke test / screenshot runs.
+[[ -n "${HEYARR_URL:-}" ]] && EXEC_CMD+=(-e "HEYARR_URL=${HEYARR_URL}")
+[[ -n "${HEYARR_TOKEN:-}" ]] && EXEC_CMD+=(-e "HEYARR_TOKEN=${HEYARR_TOKEN}")
+exec "${EXEC_CMD[@]}" "$CONTAINER" "$@"

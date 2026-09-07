@@ -1,48 +1,42 @@
 package one.rarebit.heyarr.desktop.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import one.rarebit.heyarr.desktop.auth.Credential
-import one.rarebit.heyarr.desktop.books.BooksSection
-import one.rarebit.heyarr.desktop.feeds.FeedsSection
-import one.rarebit.heyarr.desktop.library.LibraryClient
-import one.rarebit.heyarr.desktop.library.Work
-import one.rarebit.heyarr.desktop.library.WorkDetail
-import one.rarebit.heyarr.desktop.library.WorkDetailClient
-import one.rarebit.heyarr.desktop.music.MusicSection
+import one.rarebit.heyarr.desktop.heyarr.McpResult
 import one.rarebit.heyarr.desktop.net.HttpTransport
 import one.rarebit.heyarr.desktop.open.BlobDownloader
 import one.rarebit.heyarr.desktop.open.ExternalOpener
@@ -50,23 +44,50 @@ import one.rarebit.heyarr.desktop.open.JdkBlobDownloader
 import one.rarebit.heyarr.desktop.open.OpenExternally
 import one.rarebit.heyarr.desktop.open.XdgOpen
 import one.rarebit.heyarr.desktop.playback.MpvPlayer
-import one.rarebit.heyarr.desktop.playback.PlayResult
 import one.rarebit.heyarr.desktop.playback.Player
-import one.rarebit.heyarr.desktop.settings.DesktopConfig
 import one.rarebit.heyarr.desktop.settings.SettingsStore
+import one.rarebit.heyarr.desktop.state.AppSession
+import one.rarebit.heyarr.desktop.state.ArtworkLoader
+import one.rarebit.heyarr.desktop.state.Connection
+import one.rarebit.heyarr.desktop.state.SearchController
+import one.rarebit.heyarr.desktop.state.Toast
+import one.rarebit.heyarr.desktop.theme.HeyarrTheme
+import one.rarebit.heyarr.desktop.theme.LocalAppearance
+import one.rarebit.heyarr.desktop.theme.MediaThemes
+import one.rarebit.heyarr.desktop.theme.MediaType
+import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.desktop.ui.components.FilterChip
+import one.rarebit.heyarr.desktop.ui.components.GhostButton
+import one.rarebit.heyarr.desktop.ui.components.OfflineBanner
+import one.rarebit.heyarr.desktop.ui.components.Panel
+import one.rarebit.heyarr.desktop.ui.components.PrimaryButton
+import one.rarebit.heyarr.desktop.ui.components.SideNav
+import one.rarebit.heyarr.desktop.ui.components.ToastCard
+import one.rarebit.heyarr.desktop.ui.screens.DetailScreen
+import one.rarebit.heyarr.desktop.ui.screens.DetailState
+import one.rarebit.heyarr.desktop.ui.screens.Field
+import one.rarebit.heyarr.desktop.ui.screens.ForumScreen
+import one.rarebit.heyarr.desktop.ui.screens.HomeScreen
+import one.rarebit.heyarr.desktop.ui.screens.HomeState
+import one.rarebit.heyarr.desktop.ui.screens.LibraryScreen
+import one.rarebit.heyarr.desktop.ui.screens.LibraryState
+import one.rarebit.heyarr.desktop.ui.screens.MissingScreen
+import one.rarebit.heyarr.desktop.ui.screens.MissingState
+import one.rarebit.heyarr.desktop.ui.screens.NowPlayingScreen
+import one.rarebit.heyarr.desktop.ui.screens.NowPlayingState
+import one.rarebit.heyarr.desktop.ui.screens.SearchScreen
+import one.rarebit.heyarr.desktop.ui.screens.SettingsScreen
+import one.rarebit.heyarr.desktop.ui.screens.SettingsState
+
+/** A pending Want: either an existing work by id, or a title the library has never seen. */
+data class WantRequest(val workId: String?, val title: String)
 
 /**
- * The whole v1 UI: five sections — Library, Music, Books, Feeds, Settings — as a top tab
- * row. State is held in plain Compose `mutableStateOf` (a ViewModel layer comes with the
- * shared module); network work runs on `Dispatchers.IO` — the blocking [HttpTransport]
- * contract.
- *
- * Library is a master/detail: the list of works, and — when a row is clicked — a detail
- * pane that resolves the work's playable file (`GET /works/{id}`) and hands it to the
- * [player] (mpv) on **Play**. Music/Books/Feeds are self-contained section composables
- * sharing a [SectionEnv] (built from the saved config + the injected seams): [player] for
- * audio, and an [OpenExternally] (a [BlobDownloader] + an [ExternalOpener]) for
- * downloading a book/article blob to a temp file and opening it with `xdg-open`.
+ * The shell: left nav, offline banner, the routed screen, the toast stack and the Want
+ * sheet. Global keys: ⌘K / Ctrl-K focuses search, Ctrl-1…5 jump sections, ⌘, opens
+ * Settings, Esc goes back or closes the sheet. The accent in force follows the media
+ * of the screen in focus (a series detail turns the nav violet), per the appearance
+ * preference.
  */
 @Composable
 fun App(
@@ -75,286 +96,143 @@ fun App(
     player: Player = MpvPlayer(),
     opener: ExternalOpener = XdgOpen(),
     downloader: BlobDownloader = JdkBlobDownloader(),
+    initialRoute: Route = Route.Home,
+    artworkLoader: ArtworkLoader? = null,
+    /** Preview/test seam: a query typed into search on first composition. */
+    initialQuery: String? = null,
 ) {
     val scope = rememberCoroutineScope()
+    val session = remember { AppSession(settings, transport, player, OpenExternally(downloader, opener), scope, artworkLoader) }
+    val nav = remember { Nav(initialRoute) }
+    val search = remember { SearchController(scope, { session.api }, session::noteTransportFailure) }
+    val home = remember { HomeState() }
+    val library = remember { LibraryState() }
+    val missing = remember { MissingState() }
+    val nowPlaying = remember { NowPlayingState() }
+    val settingsState = remember { SettingsState() }
+    val details = remember { mutableStateMapOf<String, DetailState>() }
+    val searchFocus = remember { FocusRequester() }
+    var focusSearchTick by remember { mutableStateOf(0) }
+    var want by remember { mutableStateOf<WantRequest?>(null) }
 
-    var config by remember { mutableStateOf(settings.load()) }
-    var selectedTab by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) { session.startHeartbeat(); session.refreshIndex(); initialQuery?.let { search.updateQuery(it) } }
+    LaunchedEffect(focusSearchTick) { if (focusSearchTick > 0) runCatching { searchFocus.requestFocus() } }
 
-    val env = remember(config, transport, player, opener, downloader) {
-        SectionEnv(
-            baseUrl = config.baseUrl,
-            token = config.bearerToken.trim(),
-            transport = transport,
-            player = player,
-            openExternally = OpenExternally(downloader, opener),
-        )
+    fun openSearch() { nav.go(Route.Search); focusSearchTick++ }
+    val current = nav.current
+    val focusType = when (current) {
+        is Route.Detail -> details[current.workId]?.detail?.work?.kind?.let { MediaType.from(it) } ?: current.typeHint
+        else -> MediaType.MOVIE
     }
+    val shellTheme = if (session.appearance.adaptiveAccents) MediaThemes.of(focusType) else MediaThemes.default
 
-    // Library state.
-    var works by remember { mutableStateOf<List<Work>>(emptyList()) }
-    var loading by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf<String?>(null) }
-
-    // Detail state — the selected work and its resolved file.
-    var selected by remember { mutableStateOf<Work?>(null) }
-    var detail by remember { mutableStateOf<WorkDetail?>(null) }
-    var detailLoading by remember { mutableStateOf(false) }
-    var detailStatus by remember { mutableStateOf<String?>(null) }
-    var playStatus by remember { mutableStateOf<String?>(null) }
-
-    fun refreshLibrary() {
-        val token = config.bearerToken.trim()
-        if (token.isEmpty()) {
-            status = "Set a bearer token in Settings first."
-            selectedTab = 4
-            return
-        }
-        loading = true
-        status = null
-        scope.launch {
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    LibraryClient(transport, config.baseUrl, Credential.Bearer(token)).listWorks()
-                }
-            }
-            loading = false
-            result
-                .onSuccess {
-                    works = it
-                    status = if (it.isEmpty()) "No works returned." else "${it.size} works."
-                }
-                .onFailure { status = it.message ?: "Failed to load library." }
-        }
-    }
-
-    fun openWork(work: Work) {
-        selected = work
-        detail = null
-        playStatus = null
-        detailLoading = true
-        detailStatus = null
-        val token = config.bearerToken.trim()
-        scope.launch {
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    WorkDetailClient(transport, config.baseUrl, Credential.Bearer(token)).getWorkDetail(work.id)
-                }
-            }
-            detailLoading = false
-            result
-                .onSuccess {
-                    detail = it
-                    detailStatus = when {
-                        it == null -> "This work no longer exists."
-                        !it.isPlayable -> "No playable file for this work."
-                        else -> null
+    CompositionLocalProvider(LocalAppearance provides session.appearance) {
+        HeyarrTheme(shellTheme) {
+            Box(
+                Modifier.fillMaxSize().background(Tokens.bgBase).onPreviewKeyEvent { e ->
+                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val mod = e.isCtrlPressed || e.isMetaPressed
+                    when {
+                        mod && e.key == Key.K -> { openSearch(); true }
+                        mod && e.key == Key.Comma -> { nav.go(Route.Settings); true }
+                        mod && e.key == Key.One -> { nav.go(Route.Home); true }
+                        mod && e.key == Key.Two -> { nav.go(Route.Discover); true }
+                        mod && e.key == Key.Three -> { nav.go(Route.Library); true }
+                        mod && e.key == Key.Four -> { nav.go(Route.Missing); true }
+                        mod && e.key == Key.Five -> { nav.go(Route.NowPlaying); true }
+                        e.key == Key.Escape && want != null -> { want = null; true }
+                        e.key == Key.Escape && current is Route.Detail -> { nav.back(); true }
+                        else -> false
                     }
-                }
-                .onFailure { detailStatus = it.message ?: "Failed to load work detail." }
-        }
-    }
-
-    fun play(detail: WorkDetail) {
-        val asset = detail.primaryAsset ?: return
-        val token = config.bearerToken.trim()
-        playStatus = "Launching mpv…"
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                player.play(config.baseUrl, asset.blobHash, token)
-            }
-            playStatus = when (result) {
-                is PlayResult.Launched -> "Playing in mpv."
-                is PlayResult.Failed -> result.message
-            }
-        }
-    }
-
-    MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize()) {
-                PrimaryTabRow(selectedTabIndex = selectedTab) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0; if (works.isEmpty()) refreshLibrary() },
-                        text = { Text("Library") },
-                    )
-                    Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Music") })
-                    Tab(selected = selectedTab == 2, onClick = { selectedTab = 2 }, text = { Text("Books") })
-                    Tab(selected = selectedTab == 3, onClick = { selectedTab = 3 }, text = { Text("Feeds") })
-                    Tab(selected = selectedTab == 4, onClick = { selectedTab = 4 }, text = { Text("Settings") })
-                }
-                when (selectedTab) {
-                    0 -> {
-                        val current = selected
-                        if (current == null) {
-                            LibraryScreen(
-                                works = works,
-                                loading = loading,
-                                status = status,
-                                onRefresh = { refreshLibrary() },
-                                onOpen = { openWork(it) },
-                            )
-                        } else {
-                            WorkDetailScreen(
-                                work = current,
-                                detail = detail,
-                                loading = detailLoading,
-                                status = detailStatus,
-                                playStatus = playStatus,
-                                onBack = { selected = null; detail = null; playStatus = null },
-                                onPlay = { detail?.let { play(it) } },
-                            )
+                },
+            ) {
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    val compact = maxWidth < Tokens.compactBreakpoint
+                    Row(Modifier.fillMaxSize()) {
+                        SideNav(current, onGo = { if (it == Route.Search) openSearch() else nav.go(it) }, connection = session.connection, compact = compact)
+                        Column(Modifier.fillMaxSize()) {
+                            when (session.connection) {
+                                Connection.OFFLINE -> OfflineBanner("Can't reach heyarr", session.config.baseUrl, onRetry = { scope.launch { session.probe() } }, onSettings = { nav.go(Route.Settings) })
+                                Connection.UNAUTHORIZED -> OfflineBanner("heyarr refused the token", "Check the bearer token in Settings.", onRetry = { scope.launch { session.probe() } }, onSettings = { nav.go(Route.Settings) })
+                                else -> {}
+                            }
+                            val onWant: (String, String) -> Unit = { id, title -> want = WantRequest(id, title) }
+                            when (val r = current) {
+                                Route.Home -> HomeScreen(session, home, nav::go, onWant)
+                                Route.Discover -> HomeScreen(session, home, nav::go, onWant, discover = true)
+                                Route.Search -> SearchScreen(session, search, nav::go, onWant, searchFocus)
+                                Route.Library -> LibraryScreen(session, library, nav::go, onWant)
+                                Route.Missing -> MissingScreen(session, missing, nav::go, onWantTitle = { want = WantRequest(null, "") })
+                                Route.NowPlaying -> NowPlayingScreen(session, nowPlaying)
+                                Route.Forum -> ForumScreen()
+                                Route.Settings -> SettingsScreen(session, settingsState, onSourcesChanged = { search.invalidateSources() })
+                                is Route.Detail -> DetailScreen(session, r, details.getOrPut(r.workId) { DetailState(r.workId) }, onBack = nav::back, onOpen = nav::go, onWant = onWant)
+                            }
                         }
                     }
-                    1 -> MusicSection(env)
-                    2 -> BooksSection(env)
-                    3 -> FeedsSection(env)
-                    else -> SettingsScreen(
-                        config = config,
-                        onSave = { updated ->
-                            settings.save(updated)
-                            config = updated
-                            status = "Saved."
-                        },
-                    )
                 }
+                Column(Modifier.align(Alignment.BottomEnd).padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
+                    for (t in session.toasts.takeLast(4)) ToastCard(t, onDismiss = { session.dismiss(t) })
+                }
+                want?.let { req -> WantSheet(session, req, onClose = { want = null }) }
             }
         }
     }
 }
 
+/**
+ * The Want sheet: pick a quality profile (required — "this should exist" with no
+ * standard cannot be evaluated), optionally a note, and go. Work-by-id when opened from
+ * a card; title + type when opened from Missing for something the library has never seen.
+ */
 @Composable
-private fun SettingsScreen(
-    config: DesktopConfig,
-    onSave: (DesktopConfig) -> Unit,
-) {
-    var baseUrl by remember(config) { mutableStateOf(config.baseUrl) }
-    var token by remember(config) { mutableStateOf(config.bearerToken) }
-
-    Column(
-        Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text("heyarr connection", style = MaterialTheme.typography.titleLarge)
-        OutlinedTextField(
-            value = baseUrl,
-            onValueChange = { baseUrl = it },
-            label = { Text("Base URL") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = token,
-            onValueChange = { token = it },
-            label = { Text("Bearer token (heyarr_<id>_<secret>)") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { onSave(DesktopConfig(baseUrl = baseUrl.trim(), bearerToken = token.trim())) }) {
-                Text("Save")
-            }
-            Button(onClick = { baseUrl = DesktopConfig.DEFAULT_BASE_URL }) {
-                Text("Reset URL to default")
-            }
-        }
-        Text(
-            "Saved to ~/.config/heyarr-desktop/config.json. Voidbind device/QR login is " +
-                "stubbed until voidbind-client is resolvable (needs a read:packages token).",
-            style = MaterialTheme.typography.bodySmall,
-        )
-    }
-}
-
-@Composable
-private fun LibraryScreen(
-    works: List<Work>,
-    loading: Boolean,
-    status: String?,
-    onRefresh: () -> Unit,
-    onOpen: (Work) -> Unit,
-) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(
-            Modifier.fillMaxWidth().padding(bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Button(onClick = onRefresh, enabled = !loading) { Text("Refresh") }
-            if (loading) {
-                CircularProgressIndicator(Modifier.width(24.dp))
-            }
-            status?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-        }
-        Box(Modifier.fillMaxSize()) {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(works) { work -> WorkRow(work, onClick = { onOpen(work) }) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun WorkRow(work: Work, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Text(work.title, style = MaterialTheme.typography.titleMedium)
-            if (work.subtitle.isNotBlank()) {
-                Spacer(Modifier.width(4.dp))
-                Text(work.subtitle, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
-}
-
-@Composable
-private fun WorkDetailScreen(
-    work: Work,
-    detail: WorkDetail?,
-    loading: Boolean,
-    status: String?,
-    playStatus: String?,
-    onBack: () -> Unit,
-    onPlay: () -> Unit,
-) {
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onBack) { Text("← Library") }
-            if (loading) CircularProgressIndicator(Modifier.width(24.dp))
-        }
-
-        Text(work.title, style = MaterialTheme.typography.headlineSmall)
-        val meta = listOfNotNull(work.year?.toString(), work.kind, work.artist ?: work.author)
-            .joinToString(" · ")
-        if (meta.isNotBlank()) {
-            Text(meta, style = MaterialTheme.typography.bodyMedium)
-        }
-
-        val playable = detail?.isPlayable == true
-        val asset = detail?.primaryAsset
-        if (asset != null) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Playable file", style = MaterialTheme.typography.titleSmall)
-                    if (asset.summary.isNotBlank()) {
-                        Text(asset.summary, style = MaterialTheme.typography.bodySmall)
+private fun WantSheet(session: AppSession, req: WantRequest, onClose: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var title by remember { mutableStateOf(req.title) }
+    var year by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf(MediaType.MOVIE) }
+    var profile by remember(session.profiles) { mutableStateOf(session.profiles.firstOrNull { it.name == "everyday" }?.name ?: session.profiles.firstOrNull()?.name ?: "") }
+    var monitor by remember { mutableStateOf(true) }
+    var reason by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    val byTitle = req.workId == null
+    Box(Modifier.fillMaxSize().background(Tokens.bgBase.copy(alpha = 0.7f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose), contentAlignment = Alignment.Center) {
+        Box(Modifier.width(520.dp).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})) {
+            Panel(if (byTitle) "Want by title" else "Want “${req.title}”", trailing = { GhostButton("Close", onClose) }) {
+                if (byTitle) {
+                    Field("Title", title) { title = it }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Field("Year (optional)", year, Modifier.width(140.dp)) { year = it.filter { c -> c.isDigit() }.take(4) }
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { for (t in MediaType.SEARCHABLE) FilterChip(t.label, type == t, { type = t }) }
+                    Text("Created from the title with the same normalisation a scan uses, so wanting it now and scanning it later converge on one work.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+                }
+                Text("Quality profile — the standard this want is measured against", style = MaterialTheme.typography.labelMedium, color = Tokens.textMuted)
+                if (session.profiles.isEmpty()) Text("No profiles loaded yet.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { for (p in session.profiles) FilterChip(p.name, profile == p.name, { profile = p.name }) }
+                session.profiles.firstOrNull { it.name == profile }?.description?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted) }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip("Keep looking for something better", monitor, { monitor = !monitor })
+                }
+                Field("Reason (a note for whoever reads this in six months)", reason) { reason = it }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PrimaryButton("Want", {
+                        val a = session.api ?: return@PrimaryButton
+                        if (!byTitle) { session.want(req.workId!!, req.title, profile) { onClose() }; return@PrimaryButton }
+                        busy = true
+                        scope.launch {
+                            session.io { a.wantTitle(title.trim(), type, profile, year.toIntOrNull(), monitor, reason.ifBlank { null }) }.onSuccess { r ->
+                                when (r) {
+                                    is McpResult.Ok -> { session.toast(Toast.Kind.SUCCESS, "Wanted “${title.trim()}”", "Measured against the $profile profile."); session.refreshIndex(); onClose() }
+                                    is McpResult.Refused -> session.refused(r)
+                                }
+                            }
+                            busy = false
+                        }
+                    }, icon = Icons.Rounded.Add, enabled = !busy && profile.isNotBlank() && (!byTitle || title.isNotBlank()))
+                    GhostButton("Cancel", onClose)
                 }
             }
         }
-
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = onPlay, enabled = playable) { Text("Play") }
-            playStatus?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-        }
-
-        // A non-play status: no asset, work gone, or a fetch failure.
-        if (playStatus == null) {
-            status?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-        }
-
-        Spacer(Modifier.height(4.dp))
     }
 }

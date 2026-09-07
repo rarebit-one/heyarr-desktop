@@ -1,0 +1,199 @@
+package one.rarebit.heyarr.desktop.ui.screens
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import one.rarebit.heyarr.desktop.feeds.FollowedSource
+import one.rarebit.heyarr.desktop.library.Work
+import one.rarebit.heyarr.desktop.mcp.SearchHit
+import one.rarebit.heyarr.desktop.mcp.Want
+import one.rarebit.heyarr.desktop.state.AppSession
+import one.rarebit.heyarr.desktop.state.LibraryStatus
+import one.rarebit.heyarr.desktop.state.rememberArtwork
+import one.rarebit.heyarr.desktop.theme.CardAspect
+import one.rarebit.heyarr.desktop.theme.MediaScope
+import one.rarebit.heyarr.desktop.theme.MediaThemes
+import one.rarebit.heyarr.desktop.theme.MediaType
+import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.desktop.ui.Route
+import one.rarebit.heyarr.desktop.ui.components.GhostButton
+import one.rarebit.heyarr.desktop.ui.components.Hero
+import one.rarebit.heyarr.desktop.ui.components.HeroSkeleton
+import one.rarebit.heyarr.desktop.ui.components.MediaCard
+import one.rarebit.heyarr.desktop.ui.components.Notice
+import one.rarebit.heyarr.desktop.ui.components.PrimaryButton
+import one.rarebit.heyarr.desktop.ui.components.Rail
+import one.rarebit.heyarr.desktop.ui.components.RailState
+import one.rarebit.heyarr.desktop.ui.components.SecondaryButton
+
+/** Everything the Home screen shows, loaded rail by rail so a slow one never blanks the page. */
+class HomeState {
+    var spotlight by mutableStateOf<RailState<Work>>(RailState.Loading)
+    var recent by mutableStateOf<RailState<Work>>(RailState.Loading)
+    var byType by mutableStateOf<Map<MediaType, RailState<SearchHit>>>(MediaType.SEARCHABLE.associateWith { RailState.Loading })
+    var missing by mutableStateOf<RailState<Want>>(RailState.Loading)
+    var upgrades by mutableStateOf<RailState<Want>>(RailState.Loading)
+    var followed by mutableStateOf<RailState<FollowedSource>>(RailState.Loading)
+    var loadedOnce = false
+}
+
+/**
+ * Home / Discover — a media-mixed spotlight over themed rails. Spotlight and "Recently
+ * added" come from the works list (recent first, artwork preferred); the per-type rails
+ * from `search_content` by content type; "Wanted but missing" and "Could be better"
+ * from `get_missing_content` / `get_upgrade_candidates`; "Following" from
+ * `list_followed`. There is no server-side "continue watching" — heyarr cannot see
+ * playback history — so none is shown.
+ */
+@Composable
+fun HomeScreen(session: AppSession, state: HomeState, onOpen: (Route) -> Unit, onWant: (String, String) -> Unit, modifier: Modifier = Modifier, discover: Boolean = false) {
+    val scope = rememberCoroutineScope()
+
+    fun load() {
+        val a = session.api ?: return
+        state.loadedOnce = true
+        scope.launch {
+            session.io { a.works() }.fold(
+                onSuccess = { works ->
+                    state.recent = RailState.Loaded(works.filter { it.kind != "document" }.take(24))
+                    state.spotlight = RailState.Loaded(works.filter { it.kind != "document" && it.kind != "unknown" }.take(6))
+                },
+                onFailure = { state.recent = RailState.Failed(it.message ?: "failed"); state.spotlight = RailState.Failed(it.message ?: "failed") },
+            )
+        }
+        for (t in MediaType.SEARCHABLE) scope.launch {
+            val r = session.io { a.listByType(t, limit = 40) }.fold(onSuccess = { RailState.Loaded(it.works) }, onFailure = { RailState.Failed(it.message ?: "failed") })
+            state.byType = state.byType + (t to r)
+        }
+        scope.launch { state.missing = session.io { a.missing(40) }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+        scope.launch { state.upgrades = session.io { a.upgradeCandidates(40) }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+        scope.launch { state.followed = session.io { a.followed() }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+    }
+
+    LaunchedEffect(session.config) { if (!state.loadedOnce || session.api != null) load() }
+
+    if (session.api == null) {
+        Column(modifier.fillMaxSize().padding(32.dp)) {
+            Notice("Connect to heyarr to see your library.", detail = "Open Settings and paste the node URL and a bearer token.", icon = Icons.Rounded.Info)
+            Spacer(Modifier.height(12.dp))
+            PrimaryButton("Open Settings", { onOpen(Route.Settings) }, icon = Icons.Rounded.Add)
+        }
+        return
+    }
+
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 32.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(36.dp)) {
+        item { SpotlightBlock(session, state, onOpen, onWant) }
+        if (discover) item {
+            Notice(
+                "Discover asks the metadata provider for content the library does not hold.",
+                detail = "This node has no TVDB provider configured (ADR-0058), so discovery answers with a refusal. Search still finds everything already catalogued, and Missing lets you Want a title the library has never seen.",
+                icon = Icons.Rounded.Info,
+            )
+        }
+        item { WorkRail("Recently added", state.recent, session, onOpen, onWant, trailing = { GhostButton("Refresh", ::load, icon = Icons.Rounded.Refresh) }) }
+        for (t in MediaType.SEARCHABLE) item {
+            MediaScope(t) {
+                Rail(
+                    t.plural, state.byType[t] ?: RailState.Loading, emptyText = "No ${t.plural.lowercase()} in the library yet.",
+                    skeletonAspect = MediaThemes.of(t).aspect, skeletonWidth = if (MediaThemes.of(t).aspect == CardAspect.SQUARE) Tokens.squareWidth else Tokens.posterWidth, key = { it.workId },
+                ) { hit ->
+                    val art by session.artwork.rememberArtwork(hit.artworkPath)
+                    val status = session.index.statusOf(hit.workId)
+                    MediaCard(
+                        hit.title, MediaType.from(hit.contentType), onOpen = { onOpen(Route.Detail(hit.workId, t, hit.title, from = "Home")) },
+                        subtitle = hit.creator, meta = listOf(hit.year?.toString()), artwork = art, status = status,
+                        onWant = { onWant(hit.workId, hit.title) }, width = if (MediaThemes.of(t).aspect == CardAspect.SQUARE) Tokens.squareWidth else Tokens.posterWidth, showBadge = false,
+                    )
+                }
+            }
+        }
+        item { WantRail("Wanted but missing", state.missing, session, onOpen, subtitle = "Wants nothing acceptable has satisfied yet", emptyText = "Nothing is missing — every want is satisfied.") }
+        item { WantRail("Could be better", state.upgrades, session, onOpen, subtitle = "Satisfied and monitored; a better release may still turn up", emptyText = "No upgrade candidates.") }
+        item {
+            MediaScope(MediaType.PODCAST) {
+                Rail("Following", state.followed, subtitle = "Standing subscriptions the node polls", emptyText = "You follow nothing yet — add a feed or TVDB series in Settings.", skeletonAspect = CardAspect.SQUARE, skeletonWidth = Tokens.squareWidth, key = { it.id }) { s ->
+                    MediaCard(
+                        s.title, MediaType.from(s.type), onOpen = { s.workId?.let { onOpen(Route.Detail(it, MediaType.from(s.type), s.title, from = "Home")) } },
+                        subtitle = s.feedRef, meta = listOf("${s.itemsArchived}/${s.itemsKnown} archived", s.health), width = Tokens.squareWidth,
+                    )
+                }
+            }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun SpotlightBlock(session: AppSession, state: HomeState, onOpen: (Route) -> Unit, onWant: (String, String) -> Unit) {
+    when (val s = state.spotlight) {
+        RailState.Loading -> HeroSkeleton()
+        is RailState.Failed -> Notice("Couldn't load the library: ${s.message}", tone = Tokens.danger)
+        is RailState.Loaded -> {
+            var i by remember(s.items) { mutableStateOf(0) }
+            val work = s.items.getOrNull(i)
+            if (work == null) { Notice("The library is empty. Want something from Search, or scan a library root on the node.", icon = Icons.Rounded.Info); return }
+            val type = MediaType.from(work.kind)
+            val detail by rememberWorkArtwork(session, work.id)
+            val status = session.index.statusOf(work.id)
+            Hero(
+                title = work.title, type = type, kicker = "Spotlight", meta = listOf(work.year?.toString(), work.artist ?: work.author, work.kind),
+                artwork = detail, status = status,
+                primary = {
+                    val theme = MediaThemes.of(type)
+                    PrimaryButton(theme.ctaLabel, { onOpen(Route.Detail(work.id, type, work.title, from = "Home")) }, icon = Icons.Rounded.PlayArrow)
+                },
+                secondary = {
+                    if (status == LibraryStatus.NOT_TRACKED) SecondaryButton("Want", { onWant(work.id, work.title) }, icon = Icons.Rounded.Add)
+                    if (s.items.size > 1) GhostButton("Next", { i = (i + 1) % s.items.size })
+                },
+            )
+        }
+    }
+}
+
+/** The spotlight needs the work's artwork path, which the list does not carry — one detail read, cached by the loader. */
+@Composable
+private fun rememberWorkArtwork(session: AppSession, workId: String): androidx.compose.runtime.State<androidx.compose.ui.graphics.ImageBitmap?> {
+    val path = androidx.compose.runtime.produceState<String?>(initialValue = null, key1 = workId) {
+        val a = session.api ?: return@produceState
+        value = session.io { a.work(workId) }.getOrNull()?.let { d -> d.artworkPath }
+    }
+    return session.artwork.rememberArtwork(path.value)
+}
+
+@Composable
+private fun WorkRail(title: String, state: RailState<Work>, session: AppSession, onOpen: (Route) -> Unit, onWant: (String, String) -> Unit, trailing: (@Composable () -> Unit)? = null) {
+    Rail(title, state, emptyText = "Nothing added yet.", trailing = trailing, key = { it.id }) { w ->
+        val type = MediaType.from(w.kind)
+        val status = session.index.statusOf(w.id)
+        MediaCard(w.title, type, onOpen = { onOpen(Route.Detail(w.id, type, w.title, from = "Home")) }, subtitle = w.artist ?: w.author, meta = listOf(w.year?.toString()), status = status, onWant = { onWant(w.id, w.title) })
+    }
+}
+
+@Composable
+private fun WantRail(title: String, state: RailState<Want>, session: AppSession, onOpen: (Route) -> Unit, subtitle: String, emptyText: String) {
+    Rail(title, state, subtitle = subtitle, emptyText = emptyText, key = { it.desiredItemId }) { w ->
+        val status = LibraryStatus.ofState(w.state)
+        MediaCard(w.title, MediaType.UNKNOWN, onOpen = { w.workId?.let { onOpen(Route.Detail(it, MediaType.UNKNOWN, w.title, from = "Missing")) } }, subtitle = w.qualityProfile?.let { "profile: $it" }, meta = listOf(w.state.lowercase().replace('_', ' ')), status = status, showBadge = false)
+    }
+}

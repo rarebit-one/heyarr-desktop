@@ -1,0 +1,12 @@
+{
+  "name": "heyarr-desktop",
+  "image": "mcr.microsoft.com/devcontainers/java:17-bookworm",
+  "postCreateCommand": ".devcontainer/setup.sh",
+  "containerEnv": {
+    "GRADLE_OPTS": "-Dorg.gradle.daemon=false",
+    "JAVA_TOOL_OPTIONS": "-Djava.awt.headless=true"
+  },
+  "customizations": {
+    "vscode": { "extensions": ["fwcd.kotlin"] }
+  }
+}

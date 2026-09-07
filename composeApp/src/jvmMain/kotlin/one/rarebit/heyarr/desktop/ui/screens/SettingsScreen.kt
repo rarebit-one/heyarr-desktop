@@ -1,0 +1,196 @@
+package one.rarebit.heyarr.desktop.ui.screens
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Save
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import one.rarebit.heyarr.desktop.feeds.FollowedSource
+import one.rarebit.heyarr.desktop.heyarr.McpResult
+import one.rarebit.heyarr.desktop.mcp.PeerStatus
+import one.rarebit.heyarr.desktop.settings.DesktopConfig
+import one.rarebit.heyarr.desktop.state.AppSession
+import one.rarebit.heyarr.desktop.state.Connection
+import one.rarebit.heyarr.desktop.state.Toast
+import one.rarebit.heyarr.desktop.theme.MediaScope
+import one.rarebit.heyarr.desktop.theme.MediaType
+import one.rarebit.heyarr.desktop.theme.MediaThemes
+import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.desktop.ui.components.FilterChip
+import one.rarebit.heyarr.desktop.ui.components.GhostButton
+import one.rarebit.heyarr.desktop.ui.components.KeyValue
+import one.rarebit.heyarr.desktop.ui.components.MediaBadge
+import one.rarebit.heyarr.desktop.ui.components.Notice
+import one.rarebit.heyarr.desktop.ui.components.Panel
+import one.rarebit.heyarr.desktop.ui.components.PrimaryButton
+import one.rarebit.heyarr.desktop.ui.components.SecondaryButton
+import one.rarebit.heyarr.desktop.ui.components.SectionHeader
+import one.rarebit.heyarr.desktop.ui.components.Skeleton
+
+class SettingsState {
+    var followed by mutableStateOf<List<FollowedSource>?>(null)
+    var peers by mutableStateOf<PeerStatus?>(null)
+    var busy by mutableStateOf(false)
+}
+
+/**
+ * Settings — the heyarr connection, followed sources (`list_followed`, `follow_source`,
+ * `unfollow`), peers (`get_peer_status`, `sync_peer`) and appearance.
+ */
+@Composable
+fun SettingsScreen(session: AppSession, state: SettingsState, onSourcesChanged: () -> Unit, modifier: Modifier = Modifier) {
+    val scope = rememberCoroutineScope()
+    fun load() {
+        val a = session.api ?: return
+        scope.launch { session.io { a.followed() }.onSuccess { state.followed = it } }
+        scope.launch { session.io { a.peers() }.onSuccess { state.peers = it } }
+    }
+    LaunchedEffect(session.config) { load() }
+
+    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 32.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        item { SectionHeader("Settings") }
+        item { ConnectionPanel(session) }
+        item { FollowedPanel(session, state, { load(); onSourcesChanged() }) }
+        item { PeersPanel(session, state) }
+        item { AppearancePanel(session) }
+    }
+}
+
+@Composable
+private fun ConnectionPanel(session: AppSession) {
+    val scope = rememberCoroutineScope()
+    var baseUrl by remember(session.config) { mutableStateOf(session.config.baseUrl) }
+    var token by remember(session.config) { mutableStateOf(session.config.bearerToken) }
+    var testing by remember { mutableStateOf(false) }
+    Panel("heyarr connection") {
+        Field("Base URL", baseUrl, placeholder = DesktopConfig.DEFAULT_BASE_URL) { baseUrl = it }
+        Field("Bearer token (heyarr_<id>_<secret>)", token, secret = true) { token = it }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            PrimaryButton("Save", { session.save(DesktopConfig(baseUrl.trim(), token.trim())) }, icon = Icons.Rounded.Save, compact = true)
+            SecondaryButton("Test connection", {
+                testing = true
+                scope.launch { session.probe(); testing = false; session.toast(if (session.connection == Connection.ONLINE) Toast.Kind.SUCCESS else Toast.Kind.ERROR, "Connection: ${session.connection.name.lowercase()}") }
+            }, compact = true, enabled = !testing && token.isNotBlank())
+            GhostButton("Reset URL", { baseUrl = DesktopConfig.DEFAULT_BASE_URL })
+        }
+        KeyValue("status", session.connection.name.lowercase().replace('_', ' '))
+        Text("Saved to ~/.config/heyarr-desktop/config.json (0600). The token is a secret; moving it to the OS keyring is on the list. Voidbind device/QR login stays stubbed until voidbind-client is resolvable.", style = MaterialTheme.typography.bodySmall, color = Tokens.textDisabled)
+    }
+}
+
+@Composable
+private fun FollowedPanel(session: AppSession, state: SettingsState, reload: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var url by remember { mutableStateOf("") }
+    var tvdb by remember { mutableStateOf("") }
+    var title by remember { mutableStateOf("") }
+    var profile by remember(session.profiles) { mutableStateOf(session.profiles.firstOrNull()?.name ?: "") }
+    var backfill by remember { mutableStateOf("from_now") }
+    Panel("Followed sources", trailing = { GhostButton("Refresh", reload) }) {
+        when (val list = state.followed) {
+            null -> Skeleton(Modifier.fillMaxWidth().height(40.dp))
+            else -> if (list.isEmpty()) Text("Nothing followed yet.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+            else for (s in list) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MediaBadge(MediaType.from(s.type))
+                Column(Modifier.weight(1f)) {
+                    Text(s.title, style = MaterialTheme.typography.titleSmall, color = Tokens.textPrimary)
+                    Text(listOfNotNull(s.feedRef, "${s.itemsArchived}/${s.itemsKnown} archived", s.health?.let { "health $it" }).joinToString("  ·  "), style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted, maxLines = 1)
+                }
+                SecondaryButton("Unfollow", {
+                    val a = session.api ?: return@SecondaryButton
+                    scope.launch {
+                        session.io { a.unfollow(s.id) }.onSuccess { r -> when (r) { is McpResult.Ok -> { session.toast(Toast.Kind.SUCCESS, "Unfollowed ${s.title}", "Archived items are kept."); reload() }; is McpResult.Refused -> session.refused(r) } }
+                    }
+                }, compact = true, danger = true)
+            }
+        }
+        Text("Follow something new", style = MaterialTheme.typography.titleSmall, color = Tokens.textPrimary, modifier = Modifier.padding(top = 8.dp))
+        Text("A TVDB id or URL is a series; any other http(s) feed URL is a podcast (or an article feed).", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Field("Feed / TVDB URL", url, Modifier.weight(2f), placeholder = "https://…/rss") { url = it }
+            Field("TVDB id", tvdb, Modifier.weight(1f)) { tvdb = it.filter { c -> c.isDigit() } }
+        }
+        Field("Title (only for content the library has never seen)", title) { title = it }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Profile", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
+            for (p in session.profiles) FilterChip(p.name, profile == p.name, { profile = p.name })
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Backfill", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
+            FilterChip("from now", backfill == "from_now", { backfill = "from_now" })
+            FilterChip("full back-catalogue", backfill == "full", { backfill = "full" })
+        }
+        PrimaryButton("Follow", {
+            val a = session.api ?: return@PrimaryButton
+            scope.launch {
+                state.busy = true
+                session.io { a.follow(url, tvdb, title, profile, backfill) }.onSuccess { r ->
+                    when (r) {
+                        is McpResult.Ok -> { session.toast(Toast.Kind.SUCCESS, "Following", r.value?.title ?: url.ifBlank { tvdb }); url = ""; tvdb = ""; title = ""; reload() }
+                        is McpResult.Refused -> session.refused(r)
+                    }
+                }
+                state.busy = false
+            }
+        }, icon = Icons.Rounded.Add, compact = true, enabled = !state.busy && (url.isNotBlank() || tvdb.isNotBlank()) && profile.isNotBlank())
+    }
+}
+
+@Composable
+private fun PeersPanel(session: AppSession, state: SettingsState) {
+    val scope = rememberCoroutineScope()
+    Panel("Peers") {
+        when (val p = state.peers) {
+            null -> Skeleton(Modifier.fillMaxWidth().height(30.dp))
+            else -> {
+                for (peer in p.peers) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(peer.name + if (peer.isSelf) "  (this node)" else "", style = MaterialTheme.typography.titleSmall, color = Tokens.textPrimary)
+                        Text(listOfNotNull(peer.site, peer.mode?.let { "mode $it" }).joinToString("  ·  "), style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+                    }
+                    if (!peer.isSelf) SecondaryButton("Sync now", {
+                        val a = session.api ?: return@SecondaryButton
+                        scope.launch { session.io { a.syncPeer(peer.peerId) }.onSuccess { r -> when (r) { is McpResult.Ok -> session.toast(Toast.Kind.INFO, "Reconciliation queued", "Transfers move afterwards; this reply only says the cycle was accepted."); is McpResult.Refused -> session.refused(r) } } }
+                    }, icon = Icons.Rounded.Sync, compact = true)
+                }
+                p.note?.let { Notice(it, tone = Tokens.slate) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppearancePanel(session: AppSession) {
+    val ap = session.appearance
+    Panel("Appearance") {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip("Media-adaptive accents", ap.adaptiveAccents, { session.appearance = ap.copy(adaptiveAccents = !ap.adaptiveAccents) })
+            FilterChip("Reduce motion", ap.reduceMotion, { session.appearance = ap.copy(reduceMotion = !ap.reduceMotion) })
+        }
+        Text("The accent follows the media in focus: emerald for film, violet for series, amber for books, teal for audiobooks, magenta for podcasts, rose for music. Surfaces and text never change.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (t in listOf(MediaType.MOVIE, MediaType.SERIES, MediaType.BOOK, MediaType.AUDIOBOOK, MediaType.PODCAST, MediaType.MUSIC)) MediaScope(t) { PrimaryButton(MediaThemes.of(t).ctaLabel, {}, compact = true) }
+        }
+    }
+}

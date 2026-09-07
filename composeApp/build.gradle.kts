@@ -26,6 +26,9 @@ kotlin {
                 implementation(compose.material3)
                 implementation(compose.ui)
                 implementation(compose.components.resources)
+                // Material's extended icon set is the Compose analog of lucide-react: one
+                // dependency, vector icons, no font or CDN.
+                implementation(compose.materialIconsExtended)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
 
                 // ── Voidbind login (device/QR) — OPTIONAL, currently STUBBED ──────────
@@ -41,6 +44,7 @@ kotlin {
         val jvmTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
             }
         }
     }
@@ -69,4 +73,22 @@ compose.desktop {
             }
         }
     }
+}
+
+
+// Off-screen screenshots of every screen with fixture data — the "show the running app"
+// artefact for a headless container. Renders through Compose's ImageComposeScene (no
+// display needed) into build/screenshots/*.png.
+tasks.register<JavaExec>("screenshots") {
+    group = "verification"
+    description = "Render each screen to build/screenshots/*.png without a display."
+    dependsOn("jvmMainClasses")
+    classpath = files(
+        layout.buildDirectory.dir("classes/kotlin/jvm/main"),
+        layout.buildDirectory.dir("processedResources/jvm/main"),
+        configurations.getByName("jvmRuntimeClasspath"),
+    )
+    mainClass.set("one.rarebit.heyarr.desktop.preview.ScreenshotsKt")
+    systemProperty("java.awt.headless", "true")
+    args(layout.buildDirectory.dir("screenshots").get().asFile.absolutePath)
 }

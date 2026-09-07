@@ -12,17 +12,17 @@ import one.rarebit.heyarr.desktop.ui.App
 /**
  * Desktop entry point (`compose.desktop.application { mainClass = "…MainKt" }`).
  *
- * Wires the concrete platform pieces — the JDK HttpTransport actual and the
- * file-backed SettingsStore — and hands them to the shared [App] composable. This is
- * the only place that names concretes; everything below the UI depends on interfaces,
- * so the shared-module extraction later is a move, not a rewrite.
+ * Wires the concrete platform pieces — the JDK HttpTransport actual, the file-backed
+ * SettingsStore and the mpv player — and hands them to the shared [App] composable.
+ * This is the only place that names concretes; everything below the UI depends on
+ * interfaces, so the shared-module extraction later is a move, not a rewrite.
  */
 fun main() = application {
-    val state = rememberWindowState(width = 960.dp, height = 680.dp)
+    val state = rememberWindowState(width = 1280.dp, height = 800.dp)
     Window(
         onCloseRequest = ::exitApplication,
         state = state,
-        title = "heyarr",
+        title = "Heyarr",
     ) {
         App(
             settings = FileSettingsStore(),
