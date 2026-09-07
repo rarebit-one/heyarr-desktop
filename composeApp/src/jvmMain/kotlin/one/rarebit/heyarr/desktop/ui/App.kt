@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +16,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.PrimaryTabRow
@@ -36,7 +38,12 @@ import kotlinx.coroutines.withContext
 import one.rarebit.heyarr.desktop.auth.Credential
 import one.rarebit.heyarr.desktop.library.LibraryClient
 import one.rarebit.heyarr.desktop.library.Work
+import one.rarebit.heyarr.desktop.library.WorkDetail
+import one.rarebit.heyarr.desktop.library.WorkDetailClient
 import one.rarebit.heyarr.desktop.net.HttpTransport
+import one.rarebit.heyarr.desktop.playback.MpvPlayer
+import one.rarebit.heyarr.desktop.playback.PlayResult
+import one.rarebit.heyarr.desktop.playback.Player
 import one.rarebit.heyarr.desktop.settings.DesktopConfig
 import one.rarebit.heyarr.desktop.settings.SettingsStore
 
@@ -44,11 +51,16 @@ import one.rarebit.heyarr.desktop.settings.SettingsStore
  * The whole v1 UI: two tabs, Settings and Library. State is held in plain Compose
  * `mutableStateOf` (a ViewModel layer comes with the shared module); network work runs
  * on `Dispatchers.IO` — the blocking [HttpTransport] contract.
+ *
+ * The Library tab is a master/detail: the list of works, and — when a row is clicked —
+ * a detail pane that resolves the work's playable file (`GET /works/{id}`) and hands it
+ * to the [player] (mpv) on **Play**.
  */
 @Composable
 fun App(
     settings: SettingsStore,
     transport: HttpTransport,
+    player: Player = MpvPlayer(),
 ) {
     val scope = rememberCoroutineScope()
 
@@ -59,6 +71,13 @@ fun App(
     var works by remember { mutableStateOf<List<Work>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+
+    // Detail state — the selected work and its resolved file.
+    var selected by remember { mutableStateOf<Work?>(null) }
+    var detail by remember { mutableStateOf<WorkDetail?>(null) }
+    var detailLoading by remember { mutableStateOf(false) }
+    var detailStatus by remember { mutableStateOf<String?>(null) }
+    var playStatus by remember { mutableStateOf<String?>(null) }
 
     fun refreshLibrary() {
         val token = config.bearerToken.trim()
@@ -85,6 +104,48 @@ fun App(
         }
     }
 
+    fun openWork(work: Work) {
+        selected = work
+        detail = null
+        playStatus = null
+        detailLoading = true
+        detailStatus = null
+        val token = config.bearerToken.trim()
+        scope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    WorkDetailClient(transport, config.baseUrl, Credential.Bearer(token)).getWorkDetail(work.id)
+                }
+            }
+            detailLoading = false
+            result
+                .onSuccess {
+                    detail = it
+                    detailStatus = when {
+                        it == null -> "This work no longer exists."
+                        !it.isPlayable -> "No playable file for this work."
+                        else -> null
+                    }
+                }
+                .onFailure { detailStatus = it.message ?: "Failed to load work detail." }
+        }
+    }
+
+    fun play(detail: WorkDetail) {
+        val asset = detail.primaryAsset ?: return
+        val token = config.bearerToken.trim()
+        playStatus = "Launching mpv…"
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                player.play(config.baseUrl, asset.blobHash, token)
+            }
+            playStatus = when (result) {
+                is PlayResult.Launched -> "Playing in mpv."
+                is PlayResult.Failed -> result.message
+            }
+        }
+    }
+
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {
@@ -105,12 +166,28 @@ fun App(
                             status = "Saved."
                         },
                     )
-                    else -> LibraryScreen(
-                        works = works,
-                        loading = loading,
-                        status = status,
-                        onRefresh = { refreshLibrary() },
-                    )
+                    else -> {
+                        val current = selected
+                        if (current == null) {
+                            LibraryScreen(
+                                works = works,
+                                loading = loading,
+                                status = status,
+                                onRefresh = { refreshLibrary() },
+                                onOpen = { openWork(it) },
+                            )
+                        } else {
+                            WorkDetailScreen(
+                                work = current,
+                                detail = detail,
+                                loading = detailLoading,
+                                status = detailStatus,
+                                playStatus = playStatus,
+                                onBack = { selected = null; detail = null; playStatus = null },
+                                onPlay = { detail?.let { play(it) } },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -167,6 +244,7 @@ private fun LibraryScreen(
     loading: Boolean,
     status: String?,
     onRefresh: () -> Unit,
+    onOpen: (Work) -> Unit,
 ) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(
@@ -182,15 +260,15 @@ private fun LibraryScreen(
         }
         Box(Modifier.fillMaxSize()) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(works) { work -> WorkRow(work) }
+                items(works) { work -> WorkRow(work, onClick = { onOpen(work) }) }
             }
         }
     }
 }
 
 @Composable
-private fun WorkRow(work: Work) {
-    Card(Modifier.fillMaxWidth()) {
+private fun WorkRow(work: Work, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Text(work.title, style = MaterialTheme.typography.titleMedium)
             if (work.subtitle.isNotBlank()) {
@@ -198,5 +276,55 @@ private fun WorkRow(work: Work) {
                 Text(work.subtitle, style = MaterialTheme.typography.bodySmall)
             }
         }
+    }
+}
+
+@Composable
+private fun WorkDetailScreen(
+    work: Work,
+    detail: WorkDetail?,
+    loading: Boolean,
+    status: String?,
+    playStatus: String?,
+    onBack: () -> Unit,
+    onPlay: () -> Unit,
+) {
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = onBack) { Text("← Library") }
+            if (loading) CircularProgressIndicator(Modifier.width(24.dp))
+        }
+
+        Text(work.title, style = MaterialTheme.typography.headlineSmall)
+        val meta = listOfNotNull(work.year?.toString(), work.kind, work.artist ?: work.author)
+            .joinToString(" · ")
+        if (meta.isNotBlank()) {
+            Text(meta, style = MaterialTheme.typography.bodyMedium)
+        }
+
+        val playable = detail?.isPlayable == true
+        val asset = detail?.primaryAsset
+        if (asset != null) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Playable file", style = MaterialTheme.typography.titleSmall)
+                    if (asset.summary.isNotBlank()) {
+                        Text(asset.summary, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = onPlay, enabled = playable) { Text("Play") }
+            playStatus?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        }
+
+        // A non-play status: no asset, work gone, or a fetch failure.
+        if (playStatus == null) {
+            status?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        }
+
+        Spacer(Modifier.height(4.dp))
     }
 }
