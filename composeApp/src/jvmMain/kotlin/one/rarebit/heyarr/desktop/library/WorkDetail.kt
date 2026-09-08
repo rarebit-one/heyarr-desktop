@@ -48,6 +48,11 @@ data class PrimaryAsset(
 data class WorkDetail(
     val work: Work,
     val primaryAsset: PrimaryAsset? = null,
+    /** The `artwork` embed's relative content path (`/api/v1/blobs/<hash>/content`), when the work has a poster. */
+    val artworkPath: String? = null,
+    val artworkHash: String? = null,
+    /** The work's string attributes (overview / synopsis when a provider filled them; empty today). */
+    val attributes: Map<String, String> = emptyMap(),
 ) {
     /** True when there is a blob we can hand to the player. */
     val isPlayable: Boolean get() = primaryAsset != null && primaryAsset.blobHash.isNotBlank()
@@ -65,7 +70,13 @@ object WorkDetailJson {
     fun parse(body: String): WorkDetail? {
         val work = WorksJson.parseOne(body) ?: return null
         val obj = JsonScan.rootObject(body) ?: return WorkDetail(work)
-        return WorkDetail(work, parsePrimaryAsset(obj))
+        val artwork = JsonScan.objectAt(obj, "artwork")
+        return WorkDetail(
+            work, parsePrimaryAsset(obj),
+            artworkPath = artwork?.let { JsonScan.stringField(it, "content_url") },
+            artworkHash = artwork?.let { JsonScan.stringField(it, "blob_hash") },
+            attributes = JsonScan.objectAt(obj, "attributes")?.let { a -> listOf("overview", "synopsis", "description", "summary", "author", "artist", "narrator", "genre").mapNotNull { k -> JsonScan.stringField(a, k)?.let { k to it } }.toMap() } ?: emptyMap(),
+        )
     }
 
     /**

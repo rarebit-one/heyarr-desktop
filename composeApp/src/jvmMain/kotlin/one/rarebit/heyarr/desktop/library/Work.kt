@@ -20,6 +20,8 @@ data class Work(
     /** RFC 3339 server timestamps, as sent; parsed only for ordering/display. */
     val createdAt: String? = null,
     val updatedAt: String? = null,
+    /** The `artwork` embed's content path when the listing was asked for it (`include=artwork`). */
+    val artworkPath: String? = null,
 ) {
     /** The timestamp "recent first" orders on: last touched, else created. */
     val recency: String? get() = updatedAt ?: createdAt

@@ -22,6 +22,7 @@ data class Track(
     val sizeBytes: Long? = null,
     val missingSince: String? = null,
     val editionLabel: String? = null,
+    val sourcePath: String? = null,
 ) {
     /** A blob we can stream, and the file is present. */
     val isPlayable: Boolean get() = !blobHash.isNullOrBlank() && missingSince.isNullOrBlank()
@@ -93,6 +94,7 @@ object TracksJson {
             sizeBytes = JsonScan.longField(obj, "blob_size"),
             missingSince = JsonScan.stringField(obj, "missing_since"),
             editionLabel = JsonScan.stringField(obj, "edition_label"),
+            sourcePath = JsonScan.stringField(obj, "source_path"),
         )
     }
 }

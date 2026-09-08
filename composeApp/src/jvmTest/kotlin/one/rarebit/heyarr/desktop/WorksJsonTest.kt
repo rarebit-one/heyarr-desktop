@@ -47,7 +47,7 @@ class WorksJsonTest {
     @Test
     fun urlBuilderAddsLimitAndCursor() {
         assertEquals(
-            "https://h.example/api/v1/works?limit=200",
+            "https://h.example/api/v1/works?limit=200&include=artwork",
             LibraryClient.worksUrl("https://h.example/", null),
         )
         assertTrue(LibraryClient.worksUrl("https://h.example", "c/d").endsWith("&cursor=c%2Fd"))

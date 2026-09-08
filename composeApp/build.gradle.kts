@@ -26,6 +26,12 @@ kotlin {
                 implementation(compose.material3)
                 implementation(compose.ui)
                 implementation(compose.components.resources)
+                // Material's extended icon set is the Compose analog of lucide-react: one
+                // dependency, vector icons, no font or CDN.
+                implementation(compose.materialIconsExtended)
+                // JNA only for Native.getComponentID: the X11 window id of the AWT canvas
+                // the embedded mpv renders into (--wid). No other native call.
+                implementation("net.java.dev.jna:jna:5.14.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
 
                 // ── Voidbind login (device/QR) — OPTIONAL, currently STUBBED ──────────
@@ -41,6 +47,7 @@ kotlin {
         val jvmTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
             }
         }
     }
@@ -51,6 +58,10 @@ compose.desktop {
         mainClass = "one.rarebit.heyarr.desktop.MainKt"
 
         nativeDistributions {
+            // The bundled runtime is a jlink image: name every module the app reaches
+            // beyond the defaults. java.net.http backs JdkHttpTransport / ArtworkLoader;
+            // jdk.crypto.ec carries the TLS elliptic-curve suites heyarr's cert needs.
+            modules("java.net.http", "jdk.crypto.ec", "jdk.unsupported")
             // Linux packaging via jpackage. Declared (not run) here — `build` does not
             // package; `packageDeb` / `packageReleaseDeb` (and Rpm) would. AppImage is
             // NOT a jpackage format: it is produced out-of-band by wrapping the
@@ -69,4 +80,22 @@ compose.desktop {
             }
         }
     }
+}
+
+
+// Off-screen screenshots of every screen with fixture data — the "show the running app"
+// artefact for a headless container. Renders through Compose's ImageComposeScene (no
+// display needed) into build/screenshots/*.png.
+tasks.register<JavaExec>("screenshots") {
+    group = "verification"
+    description = "Render each screen to build/screenshots/*.png without a display."
+    dependsOn("jvmMainClasses")
+    classpath = files(
+        layout.buildDirectory.dir("classes/kotlin/jvm/main"),
+        layout.buildDirectory.dir("processedResources/jvm/main"),
+        configurations.getByName("jvmRuntimeClasspath"),
+    )
+    mainClass.set("one.rarebit.heyarr.desktop.preview.ScreenshotsKt")
+    systemProperty("java.awt.headless", "true")
+    args(layout.buildDirectory.dir("screenshots").get().asFile.absolutePath)
 }
