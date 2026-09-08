@@ -86,6 +86,7 @@ import one.rarebit.heyarr.desktop.ui.screens.NowPlayingState
 import one.rarebit.heyarr.desktop.ui.screens.PlayerKeys
 import one.rarebit.heyarr.desktop.ui.screens.PlayerScreen
 import one.rarebit.heyarr.desktop.ui.screens.PlayerScreenState
+import one.rarebit.heyarr.desktop.ui.screens.ReaderScreen
 import one.rarebit.heyarr.desktop.ui.screens.SearchScreen
 import one.rarebit.heyarr.desktop.ui.screens.SettingsScreen
 import one.rarebit.heyarr.desktop.ui.screens.SettingsState
@@ -205,7 +206,7 @@ fun App(
                         mod && e.key == Key.Five -> { nav.go(Route.NowPlaying); true }
                         e.key == Key.Escape && showConnection -> { showConnection = false; true }
                         e.key == Key.Escape && want != null -> { want = null; true }
-                        e.key == Key.Escape && current is Route.Detail -> { nav.back(); true }
+                        e.key == Key.Escape && (current is Route.Detail || current is Route.Reader) -> { nav.back(); true }
                         else -> false
                     }
                 },
@@ -239,6 +240,7 @@ fun App(
                                 Route.Settings -> SettingsScreen(session, settingsState, onSourcesChanged = { search.invalidateSources() })
                                 is Route.Detail -> DetailScreen(session, r, details.getOrPut(r.workId) { DetailState(r.workId) }, onBack = nav::back, onOpen = ::go, onWant = onWant)
                                 is Route.Player -> PlayerScreen(session, r, playerScreen, fullscreen = fullscreen, onFullscreen = ::setFullscreen, onBack = { if (fullscreen) setFullscreen(false); nav.back() }, onOpen = ::go)
+                                is Route.Reader -> ReaderScreen(session, r, onBack = nav::back)
                             } }
                             if (playback.active && current !is Route.Player && !fullscreen) NowPlayingBar(playback, onOpen = { playback.current?.let { nav.go(it) } })
                         }

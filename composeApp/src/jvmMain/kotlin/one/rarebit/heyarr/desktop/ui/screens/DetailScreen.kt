@@ -147,6 +147,8 @@ class DetailState(val workId: String) {
     var busy by mutableStateOf<String?>(null)
     /** Set by the screen each composition: how to open the embedded player. */
     var openPlayer: (Route.Player) -> Unit = {}
+    /** Set by the screen each composition: how to open the e-book reader. */
+    var openReader: (Route.Reader) -> Unit = {}
     var openVariant: (Work) -> Unit = {}
     var wantMenu by mutableStateOf(false)
     /** What a public source said about this work (cover, synopsis, TVmaze id) — labelled as external wherever shown. */
@@ -203,6 +205,7 @@ fun DetailScreen(session: AppSession, route: Route.Detail, state: DetailState, o
         }
     }
     state.openPlayer = { r -> onOpen(r) }
+    state.openReader = { r -> onOpen(r) }
     state.openVariant = { v -> onOpen(Route.Detail(v.id, MediaType.from(v.kind), v.title, from = route.titleHint ?: "Back", curate = true)) }
     LaunchedEffect(route.workId) { if (route.curate) state.tab = DetailTab.CURATE; load() }
     LaunchedEffect(wants.map { it.id }) { loadWants() }
@@ -313,6 +316,11 @@ private fun DetailHero(session: AppSession, detail: WorkDetail, type: MediaType,
             if (msg != null) session.toast(Toast.Kind.INFO, msg)
         }
     }
+    fun openBook() {
+        val a = asset ?: return
+        val fn = state.assets?.firstOrNull { it.blobHash == a.blobHash }?.filename
+        state.openReader(Route.Reader(state.workId, a.assetId ?: a.blobHash, a.blobHash, work.title, a.mime, fn, from = "Back"))
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Hero(
@@ -332,7 +340,8 @@ private fun DetailHero(session: AppSession, detail: WorkDetail, type: MediaType,
                         }
                     }, icon = Icons.Rounded.Search, enabled = state.busy == null)
                     asset == null -> PrimaryButton("Want", { onWant(work.id, work.title) }, icon = Icons.Rounded.Add, enabled = status == LibraryStatus.NOT_TRACKED)
-                    type == MediaType.BOOK || type == MediaType.FEED -> PrimaryButton(theme.ctaLabel, ::openLocal, icon = if (type == MediaType.BOOK) Icons.Rounded.MenuBook else Icons.Rounded.OpenInNew, enabled = state.busy == null)
+                    type == MediaType.BOOK -> PrimaryButton(theme.ctaLabel, ::openBook, icon = Icons.Rounded.MenuBook, enabled = state.busy == null)
+                    type == MediaType.FEED -> PrimaryButton(theme.ctaLabel, ::openLocal, icon = Icons.Rounded.OpenInNew, enabled = state.busy == null)
                     else -> PrimaryButton(theme.ctaLabel, { playLocal(session, state, asset.blobHash, work.title, scope, assetId = asset.assetId, type = type) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
                 }
             },
