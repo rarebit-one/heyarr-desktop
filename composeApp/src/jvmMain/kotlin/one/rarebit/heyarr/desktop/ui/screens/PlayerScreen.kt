@@ -162,7 +162,10 @@ fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenSt
     }
     LaunchedEffect(item.workId) {
         val a = session.api ?: return@LaunchedEffect
-        session.io { a.assets(item.workId) }.onSuccess { list -> playback.queue = Series.seasons(list).flatMap { it.episodes } }
+        session.io { a.assets(item.workId) }.onSuccess { list ->
+            playback.queue = Series.seasons(list).flatMap { it.episodes }
+            playback.refreshSubtitles()   // now the episode→sidecar map is known, attach captions to the running file
+        }
     }
     // Fullscreen: the transport shows on any activity and fades 3.5 s later while playing.
     var controlsVisible by remember { mutableStateOf(true) }
