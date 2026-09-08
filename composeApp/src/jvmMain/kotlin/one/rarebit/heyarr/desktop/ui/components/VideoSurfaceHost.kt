@@ -49,18 +49,13 @@ fun VideoSurfaceHost(session: AppSession, onToggleFullscreen: () -> Unit, onBack
                     requestFocusInWindow()
                     if (e.clickCount == 2) onToggleFullscreen() else if (playback.onPlayerScreen) playback.player.togglePause()
                 }
-                // The surface sits above Compose, so it is the one that sees the pointer arrive; take the
-                // keyboard with it so the player's keys work without a click first.
-                override fun mouseEntered(e: java.awt.event.MouseEvent) { playback.controlsVisible = true; if (playback.onPlayerScreen) requestFocusInWindow() }
-            })
-            addMouseMotionListener(object : java.awt.event.MouseMotionAdapter() {
-                override fun mouseMoved(e: java.awt.event.MouseEvent) { playback.controlsVisible = true }
-                override fun mouseDragged(e: java.awt.event.MouseEvent) { playback.controlsVisible = true }
+                // Once mpv is up its own window takes the pointer and echoes clicks over IPC; these listeners
+                // matter before that, and take the keyboard with the pointer so the player's keys work.
+                override fun mouseEntered(e: java.awt.event.MouseEvent) { if (playback.onPlayerScreen) requestFocusInWindow() }
             })
             addKeyListener(object : java.awt.event.KeyAdapter() {
                 override fun keyPressed(e: java.awt.event.KeyEvent) {
                     val k = PlayerKeys.fromAwt(e.keyCode) ?: return
-                    playback.controlsVisible = true
                     if (PlayerKeys.handle(k, playback.player, onToggleFullscreen, onBack, playback.fullscreen)) e.consume()
                 }
             })
@@ -83,7 +78,7 @@ fun VideoSurfaceHost(session: AppSession, onToggleFullscreen: () -> Unit, onBack
         playback.pendingStart = false
         playback.startError = err
         playback.surfaceReady = err == null
-        if (err == null) playback.player.play()
+        if (err == null) { playback.player.play(); if (playback.fullscreen) playback.player.overlayControls(true) }
     }
     // Bounds are window pixels. SwingPanel converts dp → peer units with LocalDensity, and the
     // peer lives in AWT units (the system scale, 1x here), so the panel is laid out under that

@@ -34,8 +34,6 @@ class PlaybackSession {
     var onPlayerScreen: Boolean by mutableStateOf(false)
 
     var fullscreen: Boolean by mutableStateOf(false)
-    /** Transport visibility in fullscreen; any mouse movement over the surface brings it back. */
-    var controlsVisible: Boolean by mutableStateOf(true)
     var popout: Boolean by mutableStateOf(false)
     var startError: String? by mutableStateOf(null)
     var surfaceReady: Boolean by mutableStateOf(false)

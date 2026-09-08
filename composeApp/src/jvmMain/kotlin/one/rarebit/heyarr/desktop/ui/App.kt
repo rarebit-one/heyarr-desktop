@@ -128,7 +128,7 @@ fun App(
     val playerScreen = remember { PlayerScreenState() }
     val playback = session.playback
     val fullscreen = playback.fullscreen
-    fun setFullscreen(on: Boolean) { playback.fullscreen = on; onFullscreen(on) }
+    fun setFullscreen(on: Boolean) { playback.fullscreen = on; onFullscreen(on); playback.player.overlayControls(on) }
     val searchFocus = remember { FocusRequester() }
     var focusSearchTick by remember { mutableStateOf(0) }
     var want by remember { mutableStateOf<WantRequest?>(null) }
@@ -148,10 +148,9 @@ fun App(
         playback.baseUrl = session.config.baseUrl; playback.token = session.config.bearerToken.trim()
         playback.accentHex = accentHex(MediaThemes.of(playback.type).accent)
     }
-    // mpv's window gets the keys in fullscreen; it echoes the ones the app must act on.
+    // mpv's window gets the pointer; it echoes clicks and the keys the app must act on.
     LaunchedEffect(Unit) {
         playback.player.onMessage = { what ->
-            playback.controlsVisible = true
             when (what) {
                 "fullscreen", "dblclick" -> setFullscreen(!playback.fullscreen)
                 "escape" -> if (playback.fullscreen) setFullscreen(false) else if (nav.current is Route.Player) nav.back()
@@ -170,7 +169,6 @@ fun App(
             if (e.id != java.awt.event.KeyEvent.KEY_PRESSED || e.isControlDown || e.isMetaDown || e.isAltDown) return@KeyEventDispatcher false
             if (!playback.onPlayerScreen || playback.popout || want != null || showConnection) return@KeyEventDispatcher false
             val key = PlayerKeys.fromAwt(e.keyCode) ?: return@KeyEventDispatcher false
-            playback.controlsVisible = true
             val handled = PlayerKeys.handle(
                 key, playback.player,
                 onFullscreen = { setFullscreen(!playback.fullscreen) },

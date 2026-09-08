@@ -107,11 +107,16 @@ class EmbeddedPlayer(
             if (wid != null) add("--wid=$wid")
             add("--input-ipc-server=${sock.absolutePath}")
             addAll(listOf("--idle=yes", "--force-window=yes", "--keep-open=yes", "--cursor-autohide=no", "--no-terminal", "--msg-level=all=error"))
-            // Embedded: mpv's child window would otherwise swallow the pointer and keys at the X level, above
-            // Compose and the AWT canvas alike. So the pointer is left to the parent (--input-cursor=no lets X
-            // propagate motion and clicks up to the canvas), while keys that reach mpv's window are bound in
-            // its own input.conf and echoed back over IPC as client-messages (see embeddedInputConf).
-            if (wid != null) addAll(listOf("--osc=no", "--osd-level=0", "--osd-bar=no", "--input-default-bindings=no", "--input-vo-keyboard=yes", "--input-cursor=no", "--input-conf=${embeddedInputConf().absolutePath}"))
+            // Embedded: mpv's child window sits above Compose at the X level, so nothing of the app's can be
+            // drawn over the picture. In fullscreen the controls therefore come from mpv itself — its OSC in
+            // the app's colours, overlaid on the video and fading on its own — and mpv keeps the pointer
+            // (--input-cursor=yes) so the OSC can be used. Windowed, the OSC stays off ("never") and the
+            // app's transport below the picture is the one UI. Clicks and the keys that mean something to
+            // the app come back over IPC as client-messages (see embeddedInputConf).
+            if (wid != null) addAll(listOf(
+                "--osc=yes", "--osd-level=1", "--osd-bar=no", "--osd-on-seek=no", "--input-default-bindings=no", "--input-vo-keyboard=yes", "--input-cursor=yes",
+                "--force-media-title=$title", "--script-opts=${oscStyle(accentHex)},osc-visibility=never", "--input-conf=${embeddedInputConf().absolutePath}",
+            ))
             // The pop-out is picture only: the app's transport is the one UI in either mode.
             // Keyboard bindings stay on so the window answers space / arrows / f on its own.
             else addAll(listOf("--osc=no", "--osd-level=1", "--osd-bar=no", "--input-default-bindings=yes", "--input-vo-keyboard=yes", "--geometry=60%"))
@@ -166,6 +171,16 @@ class EmbeddedPlayer(
             null
         }
         return err
+    }
+
+    /**
+     * Fullscreen controls: mpv's OSC over the picture, and a pointer that hides while it is still.
+     * Off, the OSC never shows and the pointer stays (the app's transport is beneath the picture).
+     */
+    fun overlayControls(on: Boolean) {
+        if (poppedOut) return
+        send("script-message", "osc-visibility", if (on) "auto" else "never", "no_osd")
+        send("set_property", "cursor-autohide", if (on) 1000 else "no")
     }
 
     fun togglePause() = send("cycle", "pause")
@@ -236,41 +251,49 @@ class EmbeddedPlayer(
     /** Where playback was when mpv went away, for the re-embed. */
     val resumePosition: Double? get() = resumeAt
 
-    /** mpv's on-screen controller in the app's colours: near-black bar, warm text, the media accent on the seek position. */
+    /**
+     * mpv's on-screen controller in the app's colours: near-black bar, warm text, the media accent
+     * on the seek position. Any pointer movement shows it (no dead zone); its fullscreen button
+     * toggles the app's fullscreen, since an embedded mpv has no window of its own to enlarge.
+     */
     private fun oscStyle(accentHex: String): String = listOf(
         "osc-layout=bottombar", "osc-seekbarstyle=bar", "osc-boxalpha=40", "osc-scalewindowed=1.1", "osc-scalefullscreen=1.1",
-        "osc-hidetimeout=1600", "osc-scrollcontrols=no", "osc-timetotal=yes",
+        "osc-hidetimeout=2500", "osc-deadzonesize=0", "osc-scrollcontrols=no", "osc-timetotal=yes",
+        "osc-fullscreen_mbtn_left_command=script-message heyarr fullscreen",
         "osc-background_color=#131116", "osc-timecode_color=#A09F9D", "osc-title_color=#F5F5F4", "osc-buttons_color=#F5F5F4",
         "osc-top_buttons_color=#A09F9D", "osc-small_buttonsL_color=#F5F5F4", "osc-small_buttonsR_color=#F5F5F4",
         "osc-time_pos_color=$accentHex", "osc-held_element_color=$accentHex",
     ).joinToString(",")
 
     /**
-     * Key bindings for the embedded window. Transport keys act inside mpv (the app
-     * mirrors the resulting property changes); the ones that mean something to the
-     * app — fullscreen, escape, a wake on any key — come back as client-messages.
+     * Bindings for the embedded window. Transport keys act inside mpv (the app mirrors the
+     * resulting property changes) without mpv's own OSD text; clicks on the picture and the
+     * keys that mean something to the app — fullscreen, escape — come back as client-messages.
+     * The OSC takes the clicks over its own controls while it is showing.
      */
     private fun embeddedInputConf(): File {
         val f = File(System.getProperty("java.io.tmpdir"), "heyarr-mpv-embedded-input.conf")
         f.writeText(
             """
-            SPACE       cycle pause; script-message heyarr wake
-            k           cycle pause; script-message heyarr wake
-            LEFT        seek -10; script-message heyarr wake
-            RIGHT       seek 10; script-message heyarr wake
-            j           seek -10; script-message heyarr wake
-            l           seek 10; script-message heyarr wake
-            UP          add volume 5; script-message heyarr wake
-            DOWN        add volume -5; script-message heyarr wake
-            m           cycle mute; script-message heyarr wake
-            c           cycle sub; script-message heyarr wake
-            s           cycle sub; script-message heyarr wake
-            f           script-message heyarr fullscreen
-            ESC         script-message heyarr escape
-            WHEEL_LEFT  seek 5
-            WHEEL_RIGHT seek -5
-            WHEEL_UP    seek 10
-            WHEEL_DOWN  seek -10
+            SPACE          cycle pause
+            k              cycle pause
+            LEFT           no-osd seek -10
+            RIGHT          no-osd seek 10
+            j              no-osd seek -10
+            l              no-osd seek 10
+            UP             no-osd add volume 5
+            DOWN           no-osd add volume -5
+            m              no-osd cycle mute
+            c              no-osd cycle sub
+            s              no-osd cycle sub
+            f              script-message heyarr fullscreen
+            ESC            script-message heyarr escape
+            MBTN_LEFT      script-message heyarr click
+            MBTN_LEFT_DBL  script-message heyarr dblclick
+            WHEEL_LEFT     no-osd seek 5
+            WHEEL_RIGHT    no-osd seek -5
+            WHEEL_UP       no-osd seek 10
+            WHEEL_DOWN     no-osd seek -10
             """.trimIndent() + "\n",
         )
         return f

@@ -63,7 +63,7 @@ class LanguageNameTest {
 class PlayerClientMessageTest {
     @kotlin.test.Test fun heyarrScriptMessagesAreRecognisedAndOthersIgnored() {
         kotlin.test.assertEquals("fullscreen", one.rarebit.heyarr.desktop.playback.PlayerEvents.clientMessage("""{"event":"client-message","args":["heyarr","fullscreen"]}"""))
-        kotlin.test.assertEquals("wake", one.rarebit.heyarr.desktop.playback.PlayerEvents.clientMessage("""{"event":"client-message","args":["heyarr","wake"]}"""))
+        kotlin.test.assertEquals("dblclick", one.rarebit.heyarr.desktop.playback.PlayerEvents.clientMessage("""{"event":"client-message","args":["heyarr","dblclick"]}"""))
         kotlin.test.assertNull(one.rarebit.heyarr.desktop.playback.PlayerEvents.clientMessage("""{"event":"client-message","args":["osc-visibility","auto"]}"""))
         kotlin.test.assertNull(one.rarebit.heyarr.desktop.playback.PlayerEvents.clientMessage("""{"event":"property-change","id":1,"name":"pause","data":true}"""))
     }

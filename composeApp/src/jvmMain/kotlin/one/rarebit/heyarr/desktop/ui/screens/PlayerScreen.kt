@@ -52,9 +52,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.onPointerEvent
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.contentDescription
@@ -62,7 +59,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import one.rarebit.heyarr.desktop.heyarr.McpResult
 import one.rarebit.heyarr.desktop.library.Series
@@ -136,7 +132,6 @@ object PlayerKeys {
  * below), our transport, and what's next. Playback belongs to the session, so leaving
  * this screen keeps it going in the now-playing bar; Back is just Back.
  */
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenState, fullscreen: Boolean, onFullscreen: (Boolean) -> Unit, onBack: () -> Unit, onOpen: (Route) -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
@@ -156,16 +151,11 @@ fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenSt
         val a = session.api ?: return@LaunchedEffect
         session.io { a.assets(item.workId) }.onSuccess { list -> playback.queue = Series.seasons(list).flatMap { it.episodes } }
     }
-    LaunchedEffect(fullscreen, ps.paused, playback.controlsVisible) {
-        if (fullscreen && !ps.paused && playback.controlsVisible) { delay(3500); playback.controlsVisible = false }
-        if (!fullscreen) playback.controlsVisible = true
-    }
-    fun toggleFullscreen() { onFullscreen(!fullscreen); playback.controlsVisible = true }
+    fun toggleFullscreen() = onFullscreen(!fullscreen)
 
     MediaScope(type) {
         val theme = LocalMediaTheme.current
-        // Any pointer movement over the screen (the surface handles its own) wakes the transport.
-        Column(modifier.fillMaxSize().background(if (fullscreen) Color.Black else Tokens.bgBase).onPointerEvent(PointerEventType.Move) { playback.controlsVisible = true }) {
+        Column(modifier.fillMaxSize().background(if (fullscreen) Color.Black else Tokens.bgBase)) {
             if (!fullscreen) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 GhostButton(item.from, onBack, icon = Icons.Rounded.ArrowBack)
                 Column(Modifier.weight(1f)) {
@@ -187,8 +177,10 @@ fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenSt
             }
             if (state.castOpen && !fullscreen) Box(Modifier.padding(horizontal = 24.dp)) { CastRow(session, state, item) }
 
-            // ── the picture: an empty box that reports where the native surface should be ──
-            val videoModifier = if (fullscreen) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth().padding(horizontal = 24.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(Tokens.radiusCard))
+            // ── the picture: an empty box that reports where the native surface should be. Fullscreen it is
+            // the whole window; the controls then are mpv's OSC over the picture (see EmbeddedPlayer), so
+            // nothing below it appears or disappears and the picture never moves. ──
+            val videoModifier = if (fullscreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth().padding(horizontal = 24.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(Tokens.radiusCard))
             Box(videoModifier.background(Color.Black).onGloballyPositioned { c ->
                 if (!playback.popout) { val pos = c.positionInRoot(); playback.surfaceBounds = IntRect(pos.x.toInt(), pos.y.toInt(), pos.x.toInt() + c.size.width, pos.y.toInt() + c.size.height) }
             }) {
@@ -203,8 +195,8 @@ fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenSt
                 }
             }
 
-            // ── the transport ──
-            if (playback.controlsVisible || ps.paused || !fullscreen) Column(Modifier.fillMaxWidth().background(if (fullscreen) Color.Black else Tokens.bgBase).padding(horizontal = 24.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // ── the transport (windowed; fullscreen has mpv's OSC) ──
+            if (!fullscreen) Column(Modifier.fillMaxWidth().background(Tokens.bgBase).padding(horizontal = 24.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SeekBar(ps, onSeek = { p.seekFraction(it.toDouble()) })
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     IconButtonRound(Icons.Rounded.Replay10, "Back 10 seconds (←)", { p.seekBy(-10.0) }, size = 36.dp)
@@ -222,9 +214,8 @@ fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenSt
                     Spacer(Modifier.width(8.dp))
                     IconButtonRound(if (ps.muted || ps.volume <= 0) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp, if (ps.muted) "Unmute (M)" else "Mute (M)", { p.toggleMute() }, size = 32.dp)
                     Slider(value = (ps.volume / 100.0).toFloat().coerceIn(0f, 1.3f), onValueChange = { p.setVolume(it * 100.0) }, valueRange = 0f..1.3f, modifier = Modifier.width(110.dp).semantics { contentDescription = "Volume ${ps.volume.toInt()}%" }, colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent, inactiveTrackColor = Tokens.surface3))
-                    IconButtonRound(if (fullscreen) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen, if (fullscreen) "Exit fullscreen (Esc)" else "Fullscreen (F)", ::toggleFullscreen, size = 40.dp, filled = !fullscreen)
+                    IconButtonRound(Icons.Rounded.Fullscreen, "Fullscreen (F)", ::toggleFullscreen, size = 40.dp, filled = true)
                 }
-                if (fullscreen) Text(item.title + (item.subtitle?.let { "  ·  $it" } ?: ""), style = MaterialTheme.typography.labelMedium, color = Tokens.textMuted)
             }
 
             // ── up next: the one episode after this one ──
