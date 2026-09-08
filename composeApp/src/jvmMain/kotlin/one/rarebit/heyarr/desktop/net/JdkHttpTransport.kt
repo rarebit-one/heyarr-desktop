@@ -13,17 +13,25 @@ import java.time.Duration
  * keeps the desktop module's dependency surface small (matching the org's "no
  * Retrofit/Ktor" stance).
  *
- * The single shared [HttpClient] pools connections and follows normal redirects.
+ * The shared [HttpClient] pools connections and follows normal redirects. [reset]
+ * replaces it: the JDK client keeps an HTTP/2 connection whose peer went away with
+ * the old network, and a stream that times out does not close the connection under
+ * it, so without a fresh client every later request would time out the same way.
  * Bodies are read as UTF-8 strings; the auth header travels in the per-call [headers]
  * map exactly as the mobile transport carries it.
  */
 class JdkHttpTransport(
-    private val client: HttpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(15))
-        .followRedirects(HttpClient.Redirect.NORMAL)
-        .build(),
+    private val newClient: () -> HttpClient = {
+        HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(15))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build()
+    },
     private val requestTimeout: Duration = Duration.ofSeconds(30),
 ) : HttpTransport {
+    @Volatile private var client: HttpClient = newClient()
+
+    override fun reset() { client = newClient() }
 
     override fun get(url: String, headers: Map<String, String>): HttpResponse =
         send(baseRequest(url, headers).GET().build())
