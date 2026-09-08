@@ -94,11 +94,16 @@ HiDPI Wayland): `scripts/heyarr-desktop`. It sets `_JAVA_AWT_WM_NONREPARENTING=1
 Settings → Appearance, seeded from `HEYARR_UI_SCALE` or `GDK_SCALE` — a JVM under
 XWayland reports 1× and ignores `sun.java2d.uiScale` for Compose.
 
+Playback in the app is libmpv in-process (`libmpv.so` / `libmpv.dylib`, part of the
+`mpv` package on Arch and Homebrew): mpv decodes into memory frames the UI draws, so
+the transport and everything else sit over the picture. "Pop out" runs the `mpv`
+command in a window of its own, driven over the same control socket.
+
 Locally, with a JDK 17 on `PATH`:
 
 ```bash
 ./gradlew build
-./gradlew :composeApp:run   # needs a display; mpv on PATH for "Play here"
+./gradlew :composeApp:run   # needs a display; libmpv for playback in the app, the mpv command for the pop-out
 ```
 
 The screenshot task drives the real `App` with `preview/Fixtures.kt` — canned answers
@@ -155,6 +160,5 @@ the library's `LoginApproval` / `DevicePairing` / `WebLoginClient`.
   `commonMain` shared with heyarr-mobile (the code here already avoids JVM-only APIs
   below the UI, except `JdkHttpTransport`, `FileSettingsStore` and `ArtworkLoader`'s
   Skia decode).
-- **In-process playback** — VLCJ or GStreamer-java for "Play here" without mpv.
 - **Reader** — the EPUB/CBZ surface for books.
 - **Personal-state crypto** — the encrypted personal-state sync, once the desktop can hold a device key.

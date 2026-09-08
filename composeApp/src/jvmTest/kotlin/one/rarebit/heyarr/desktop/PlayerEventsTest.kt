@@ -60,11 +60,13 @@ class LanguageNameTest {
     }
 }
 
-class PlayerClientMessageTest {
-    @kotlin.test.Test fun heyarrScriptMessagesAreRecognisedAndOthersIgnored() {
-        kotlin.test.assertEquals("fullscreen", one.rarebit.heyarr.desktop.playback.PlayerEvents.clientMessage("""{"event":"client-message","args":["heyarr","fullscreen"]}"""))
-        kotlin.test.assertEquals("dblclick", one.rarebit.heyarr.desktop.playback.PlayerEvents.clientMessage("""{"event":"client-message","args":["heyarr","dblclick"]}"""))
-        kotlin.test.assertNull(one.rarebit.heyarr.desktop.playback.PlayerEvents.clientMessage("""{"event":"client-message","args":["osc-visibility","auto"]}"""))
-        kotlin.test.assertNull(one.rarebit.heyarr.desktop.playback.PlayerEvents.clientMessage("""{"event":"property-change","id":1,"name":"pause","data":true}"""))
+class MpvRendererTest {
+    @kotlin.test.Test fun renderSizeIsTheDisplaySizeCappedAndEven() {
+        val r = one.rarebit.heyarr.desktop.playback.MpvRenderer.Companion
+        kotlin.test.assertEquals(1920 to 1080, r.renderSize(1920, 1080))
+        kotlin.test.assertEquals(1918 to 1080, r.renderSize(1919, 1081))
+        kotlin.test.assertEquals(3840 to 2160, r.renderSize(7680, 4320))
+        kotlin.test.assertEquals(2160 to 3840, r.renderSize(4320, 7680))
+        kotlin.test.assertNull(r.renderSize(0, 0))
     }
 }

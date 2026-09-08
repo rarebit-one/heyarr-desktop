@@ -33,13 +33,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import one.rarebit.heyarr.desktop.state.PlaybackSession
 import one.rarebit.heyarr.desktop.theme.LocalMediaTheme
@@ -48,8 +45,8 @@ import one.rarebit.heyarr.desktop.theme.Tokens
 
 /**
  * The persistent transport at the foot of the window while something plays and the
- * player screen is not showing. The thumbnail is the live native surface — the same
- * mpv, shrunk — so video keeps moving in the corner while you browse; music and
+ * player screen is not showing. The thumbnail is the live picture — the same mpv,
+ * drawn small — so video keeps moving in the corner while you browse; music and
  * podcasts simply keep playing. Click the title or the expand button to return to
  * the full player; the close button stops playback.
  */
@@ -68,11 +65,8 @@ fun NowPlayingBar(playback: PlaybackSession, onOpen: () -> Unit, modifier: Modif
                 colors = SliderDefaults.colors(thumbColor = theme.accentGradientEnd, activeTrackColor = theme.accent, inactiveTrackColor = Tokens.surface3),
             )
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                // The live surface lands here; the box only reports where it is.
-                Box(
-                    Modifier.width(88.dp).height(50.dp).clip(RoundedCornerShape(6.dp)).background(Tokens.bgBase)
-                        .onGloballyPositioned { c -> if (!playback.onPlayerScreen && !playback.fullscreen) { val p = c.positionInRoot(); playback.surfaceBounds = IntRect(p.x.toInt(), p.y.toInt(), p.x.toInt() + c.size.width, p.y.toInt() + c.size.height) } },
-                )
+                // The live picture, small.
+                VideoSurface(playback.player, Modifier.width(88.dp).height(50.dp).clip(RoundedCornerShape(6.dp)))
                 Column(
                     Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onOpen).semantics { contentDescription = "Open the player for ${item.title}" }.padding(4.dp),
                 ) {

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import one.rarebit.heyarr.desktop.mcp.JsonWrite
 import one.rarebit.heyarr.desktop.net.JsonScan
+import com.sun.jna.Pointer
 import java.io.File
 import java.io.IOException
 import java.net.StandardProtocolFamily
@@ -39,13 +40,15 @@ data class PlayerState(
 }
 
 /**
- * mpv, embedded: the same mpv this box already has, rendering into an X11 window id we
- * own (`--wid`), with its own OSC and key bindings switched off and every control
- * driven over its JSON IPC socket. The UI draws the transport; mpv draws the frames.
+ * mpv, embedded: libmpv inside this process, decoding into memory frames the picture
+ * composable draws ([MpvRenderer]), with every control driven over mpv's JSON IPC
+ * socket — the same socket a pop-out `mpv` process offers, so one transport drives
+ * both. The UI draws the transport over the picture; mpv only ever produces frames.
  *
- * Why not libmpv or VLC: mpv is on PATH here, `--wid` has worked for a decade, and the
- * IPC surface is a dozen commands. The bearer token rides in
- * `--http-header-fields` as an argv element (no shell), never in a log line.
+ * Why libmpv and not `--wid`: an X window embedded over Compose sits above everything
+ * the app draws, so nothing could overlay the picture, and it only worked through
+ * XWayland at all. A memory frame is a Compose element like any other. The bearer
+ * token rides in `http-header-fields` as an option (no shell), never in a log line.
  *
  * Blocking I/O lives on a reader thread; state lands in a Compose `mutableStateOf`
  * so the controls recompose on every property change. Pure parsing (events →
@@ -54,28 +57,25 @@ data class PlayerState(
 class EmbeddedPlayer(
     private val command: String = "mpv",
     private val spawn: (List<String>) -> Process = { argv ->
-        ProcessBuilder(argv).apply {
-            // --wid is an X11 embed. With WAYLAND_DISPLAY in its environment mpv picks its
-            // Wayland backend, ignores the wid and opens a window of its own (verified on
-            // Hyprland): the JVM is an XWayland client, so mpv must be one too.
-            environment().remove("WAYLAND_DISPLAY")
-            redirectErrorStream(true); redirectOutput(ProcessBuilder.Redirect.DISCARD)
-        }.start()
+        ProcessBuilder(argv).apply { redirectErrorStream(true); redirectOutput(ProcessBuilder.Redirect.DISCARD) }.start()
     },
 ) {
     var state: PlayerState by mutableStateOf(PlayerState())
         private set
 
-    /** `script-message heyarr <what>` from mpv's bindings — fullscreen, escape, wake, click, dblclick. Called on the reader thread. */
-    var onMessage: ((String) -> Unit)? = null
+    /** The in-process renderer while embedded; the picture composable reads its frames. */
+    internal var renderer: MpvRenderer? by mutableStateOf(null)
+        private set
 
+    private var lib: MpvLib? = null
+    private var handle: Pointer? = null
     private var process: Process? = null
     private var channel: SocketChannel? = null
     private var reader: Thread? = null
     private var socketPath: File? = null
     @Volatile private var closed = false
 
-    val isRunning: Boolean get() = process?.isAlive == true && channel?.isOpen == true
+    val isRunning: Boolean get() = (handle != null || process?.isAlive == true) && channel?.isOpen == true
 
     /** True when mpv runs in its own window rather than inside the app. */
     var poppedOut: Boolean = false
@@ -87,60 +87,74 @@ class EmbeddedPlayer(
     private var lastUrl: String? = null
     private var lastToken: String? = null
     private var lastTitle: String? = null
-    private var lastAccent: String = "#00935E"
 
     /**
-     * Spawn mpv and load [url]. With a [wid] mpv renders into that X11 window (the
-     * app's canvas); with none it opens its own window — the pop-out — and keeps its
-     * OSC so that window is usable on its own, while the app's transport still drives
-     * it over the same socket. Returns null on success, else a UI-safe reason.
+     * Start mpv and load [url]. [embedded] runs libmpv in-process, rendering into the
+     * app; otherwise an `mpv` process opens its own window — the pop-out — while the
+     * app's transport still drives it over the same socket. Returns null on success,
+     * else a UI-safe reason.
      */
-    fun start(wid: Long?, url: String, token: String, title: String, accentHex: String = "#00935E"): String? {
+    fun start(embedded: Boolean, url: String, token: String, title: String): String? {
         close()
         closed = false
-        poppedOut = wid == null
-        lastUrl = url; lastToken = token; lastTitle = title; lastAccent = accentHex
-        val sock = File(System.getProperty("java.io.tmpdir"), "heyarr-mpv-${ProcessHandle.current().pid()}-${System.nanoTime()}.sock")
+        poppedOut = !embedded
+        lastUrl = url; lastToken = token; lastTitle = title
+        val tmp = File(System.getProperty("java.io.tmpdir"))
+        sweepStaleSockets(tmp)
+        val sock = File(tmp, "heyarr-mpv-${ProcessHandle.current().pid()}-${System.nanoTime()}.sock")
         socketPath = sock
-        val argv = buildList {
-            add(command)
-            if (wid != null) add("--wid=$wid")
-            add("--input-ipc-server=${sock.absolutePath}")
-            addAll(listOf("--idle=yes", "--force-window=yes", "--keep-open=yes", "--cursor-autohide=no", "--no-terminal", "--msg-level=all=error"))
-            // Embedded: mpv's child window sits above Compose at the X level, so nothing of the app's can be
-            // drawn over the picture. In fullscreen the controls therefore come from mpv itself — its OSC in
-            // the app's colours, overlaid on the video and fading on its own — and mpv keeps the pointer
-            // (--input-cursor=yes) so the OSC can be used. Windowed, the OSC stays off ("never") and the
-            // app's transport below the picture is the one UI. Clicks and the keys that mean something to
-            // the app come back over IPC as client-messages (see embeddedInputConf).
-            if (wid != null) addAll(listOf(
-                "--osc=yes", "--osd-level=1", "--osd-bar=no", "--osd-on-seek=no", "--input-default-bindings=no", "--input-vo-keyboard=yes", "--input-cursor=yes",
-                "--force-media-title=$title", "--script-opts=${oscStyle(accentHex)},osc-visibility=never", "--input-conf=${embeddedInputConf().absolutePath}",
-            ))
-            // The pop-out is picture only: the app's transport is the one UI in either mode.
-            // Keyboard bindings stay on so the window answers space / arrows / f on its own.
-            else addAll(listOf("--osc=no", "--osd-level=1", "--osd-bar=no", "--input-default-bindings=yes", "--input-vo-keyboard=yes", "--geometry=60%"))
-            resumeAt?.let { if (it > 1.0) add("--start=$it") }
-            resumeAt = null
-            add("--http-header-fields=Authorization: Bearer $token")
-            add("--title=$title")
-            add(url)
-        }
+        val start = resumeAt?.takeIf { it > 1.0 }
+        resumeAt = null
         exited = false
-        process = try { spawn(argv) } catch (e: IOException) { return "mpv could not be started — is it installed and on PATH?" }
+        val err = if (embedded) startInProcess(sock, token, title, start) else startProcess(sock, url, token, title, start)
+        if (err != null) { close(); return err }
         // The socket appears once mpv is up; a window under XWayland can take a moment.
         val deadline = System.currentTimeMillis() + 12_000
         var ch: SocketChannel? = null
         while (System.currentTimeMillis() < deadline && ch == null) {
-            if (process?.isAlive != true) return "mpv exited before it opened its control socket."
+            if (!embedded && process?.isAlive != true) { close(); return "mpv exited before it opened its control socket." }
             ch = try {
                 SocketChannel.open(StandardProtocolFamily.UNIX).also { it.connect(UnixDomainSocketAddress.of(sock.toPath())) }
             } catch (e: IOException) { Thread.sleep(80); null }
         }
-        channel = ch ?: return "mpv started but its control socket never answered."
+        channel = ch ?: run { close(); return "mpv started but its control socket never answered." }
         state = PlayerState(title = title)
         reader = Thread({ readLoop(ch) }, "mpv-ipc").apply { isDaemon = true; start() }
         for ((i, prop) in OBSERVED.withIndex()) send("observe_property", i + 1, prop)
+        if (embedded) send("loadfile", url)
+        return null
+    }
+
+    /** libmpv in this process: no window, no OSD of its own, frames through [MpvRenderer]. */
+    private fun startInProcess(sock: File, token: String, title: String, start: Double?): String? {
+        val lib = MpvLib.loaded.getOrElse { return it.message ?: "libmpv is not installed" }
+        val h = lib.mpv_create() ?: return "libmpv could not create a player"
+        val options = listOf(
+            "vo" to "libmpv", "input-ipc-server" to sock.absolutePath, "idle" to "yes", "keep-open" to "yes", "terminal" to "no",
+            "msg-level" to "all=error", "osc" to "no", "osd-level" to "0", "input-default-bindings" to "no", "hwdec" to "no",
+            "http-header-fields" to "Authorization: Bearer $token", "force-media-title" to title,
+        ) + listOfNotNull(start?.let { "start" to it.toString() })
+        for ((k, v) in options) lib.mpv_set_option_string(h, k, v)
+        val rc = lib.mpv_initialize(h)
+        if (rc < 0) { lib.mpv_terminate_destroy(h); return "libmpv: ${lib.mpv_error_string(rc)}" }
+        this.lib = lib; handle = h
+        renderer = try { MpvRenderer(lib, h) } catch (e: IllegalStateException) { return e.message }
+        return null
+    }
+
+    /** A window of mpv's own. Picture only: the app's transport is the one UI in either mode; its keys still work on their own. */
+    private fun startProcess(sock: File, url: String, token: String, title: String, start: Double?): String? {
+        val argv = buildList {
+            add(command)
+            add("--input-ipc-server=${sock.absolutePath}")
+            addAll(listOf("--idle=yes", "--force-window=yes", "--keep-open=yes", "--no-terminal", "--msg-level=all=error"))
+            addAll(listOf("--osc=no", "--osd-level=1", "--osd-bar=no", "--input-default-bindings=yes", "--input-vo-keyboard=yes", "--geometry=60%", "--input-conf=${inputConf().absolutePath}"))
+            start?.let { add("--start=$it") }
+            add("--http-header-fields=Authorization: Bearer $token")
+            add("--title=$title")
+            add(url)
+        }
+        process = try { spawn(argv) } catch (e: IOException) { return "mpv could not be started — is it installed and on PATH?" }
         return null
     }
 
@@ -148,40 +162,33 @@ class EmbeddedPlayer(
     fun load(url: String, title: String) {
         lastUrl = url; lastTitle = title
         state = state.copy(loaded = false, position = 0.0, duration = 0.0, eof = false, error = null, title = title, subtitles = emptyList(), audio = emptyList())
-        send("loadfile", url, "replace")
+        send("set_property", "force-media-title", title)
+        send("loadfile", url)
         send("set_property", "pause", false)
     }
 
     /**
-     * Move playback between the app's surface and a window of mpv's own, keeping the
-     * position, pause state and volume. mpv cannot re-parent a live window, so this
-     * is a restart with a seek — the file is streamed, so it resumes in a moment.
+     * Move playback between the app and a window of mpv's own, keeping the position,
+     * pause state and volume. A live player cannot change hosts, so this is a restart
+     * with a seek — the file is streamed, so it resumes in a moment.
      */
-    fun switchWindow(wid: Long?): String? {
+    fun switchTo(embedded: Boolean): String? {
         val url = lastUrl ?: return "nothing is playing"
         val token = lastToken ?: return "nothing is playing"
         val title = lastTitle ?: ""
         val resume = state.copy()
-        val err = start(wid, url, token, title, lastAccent) ?: run {
-            if (resume.position > 1.0) send("set_property", "start", resume.position.toString())
+        resumeAt = resume.position
+        val err = start(embedded, url, token, title) ?: run {
             send("set_property", "volume", resume.volume)
             send("set_property", "mute", resume.muted)
-            if (resume.position > 1.0) send("seek", resume.position, "absolute")
             send("set_property", "pause", resume.paused)
             null
         }
         return err
     }
 
-    /**
-     * Fullscreen controls: mpv's OSC over the picture, and a pointer that hides while it is still.
-     * Off, the OSC never shows and the pointer stays (the app's transport is beneath the picture).
-     */
-    fun overlayControls(on: Boolean) {
-        if (poppedOut) return
-        send("script-message", "osc-visibility", if (on) "auto" else "never", "no_osd")
-        send("set_property", "cursor-autohide", if (on) 1000 else "no")
-    }
+    /** Where playback was when mpv went away, for the re-embed. */
+    val resumePosition: Double? get() = resumeAt
 
     fun togglePause() = send("cycle", "pause")
     fun play() = send("set_property", "pause", false)
@@ -201,6 +208,11 @@ class EmbeddedPlayer(
         runCatching { send("quit") }
         runCatching { channel?.close() }
         channel = null
+        // Order matters: the render context must go before the core (render.h), and the core before the socket file.
+        renderer?.let { r -> runCatching { r.close() } }
+        renderer = null
+        handle?.let { h -> lib?.let { l -> runCatching { l.mpv_terminate_destroy(h) } } }
+        handle = null
         process?.let { p -> if (!p.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)) p.destroyForcibly() }
         process = null
         socketPath?.delete()
@@ -229,10 +241,7 @@ class EmbeddedPlayer(
                 while (pending.indexOf("\n").also { nl = it } >= 0) {
                     val line = pending.substring(0, nl).trim()
                     pending.delete(0, nl + 1)
-                    if (line.isNotEmpty()) {
-                        PlayerEvents.clientMessage(line)?.let { msg -> onMessage?.invoke(msg) }
-                        state = PlayerEvents.apply(state, line)
-                    }
+                    if (line.isNotEmpty()) state = PlayerEvents.apply(state, line)
                 }
             }
         } catch (e: IOException) {
@@ -246,57 +255,6 @@ class EmbeddedPlayer(
         resumeAt = state.position
         state = state.copy(error = null)
         exited = true
-    }
-
-    /** Where playback was when mpv went away, for the re-embed. */
-    val resumePosition: Double? get() = resumeAt
-
-    /**
-     * mpv's on-screen controller in the app's colours: near-black bar, warm text, the media accent
-     * on the seek position. Any pointer movement shows it (no dead zone); its fullscreen button
-     * toggles the app's fullscreen, since an embedded mpv has no window of its own to enlarge.
-     */
-    private fun oscStyle(accentHex: String): String = listOf(
-        "osc-layout=bottombar", "osc-seekbarstyle=bar", "osc-boxalpha=40", "osc-scalewindowed=1.1", "osc-scalefullscreen=1.1",
-        "osc-hidetimeout=2500", "osc-deadzonesize=0", "osc-scrollcontrols=no", "osc-timetotal=yes",
-        "osc-fullscreen_mbtn_left_command=script-message heyarr fullscreen",
-        "osc-background_color=#131116", "osc-timecode_color=#A09F9D", "osc-title_color=#F5F5F4", "osc-buttons_color=#F5F5F4",
-        "osc-top_buttons_color=#A09F9D", "osc-small_buttonsL_color=#F5F5F4", "osc-small_buttonsR_color=#F5F5F4",
-        "osc-time_pos_color=$accentHex", "osc-held_element_color=$accentHex",
-    ).joinToString(",")
-
-    /**
-     * Bindings for the embedded window. Transport keys act inside mpv (the app mirrors the
-     * resulting property changes) without mpv's own OSD text; clicks on the picture and the
-     * keys that mean something to the app — fullscreen, escape — come back as client-messages.
-     * The OSC takes the clicks over its own controls while it is showing.
-     */
-    private fun embeddedInputConf(): File {
-        val f = File(System.getProperty("java.io.tmpdir"), "heyarr-mpv-embedded-input.conf")
-        f.writeText(
-            """
-            SPACE          cycle pause
-            k              cycle pause
-            LEFT           no-osd seek -10
-            RIGHT          no-osd seek 10
-            j              no-osd seek -10
-            l              no-osd seek 10
-            UP             no-osd add volume 5
-            DOWN           no-osd add volume -5
-            m              no-osd cycle mute
-            c              no-osd cycle sub
-            s              no-osd cycle sub
-            f              script-message heyarr fullscreen
-            ESC            script-message heyarr escape
-            MBTN_LEFT      script-message heyarr click
-            MBTN_LEFT_DBL  script-message heyarr dblclick
-            WHEEL_LEFT     no-osd seek 5
-            WHEEL_RIGHT    no-osd seek -5
-            WHEEL_UP       no-osd seek 10
-            WHEEL_DOWN     no-osd seek -10
-            """.trimIndent() + "\n",
-        )
-        return f
     }
 
     /**
@@ -321,6 +279,14 @@ class EmbeddedPlayer(
     }
 
     companion object {
+        /** Sockets left by app processes that are gone (a kill, a crash); ours are named by pid. */
+        internal fun sweepStaleSockets(dir: File) {
+            dir.listFiles { f -> f.name.startsWith("heyarr-mpv-") && f.name.endsWith(".sock") }?.forEach { f ->
+                val pid = f.name.removePrefix("heyarr-mpv-").substringBefore('-').toLongOrNull() ?: return@forEach
+                if (pid != ProcessHandle.current().pid() && !ProcessHandle.of(pid).map { it.isAlive }.orElse(false)) f.delete()
+            }
+        }
+
         /** Properties observed in order; the index+1 is the observer id. */
         val OBSERVED = listOf("time-pos", "duration", "pause", "volume", "mute", "paused-for-cache", "eof-reached", "track-list", "sid", "aid", "media-title")
     }
@@ -328,14 +294,6 @@ class EmbeddedPlayer(
 
 /** Pure: fold one mpv IPC line into the state. */
 object PlayerEvents {
-    /** The `<what>` of a `script-message heyarr <what>` client-message line, or null for any other line. */
-    fun clientMessage(line: String): String? {
-        val obj = JsonScan.rootObject(line) ?: return null
-        if (JsonScan.stringField(obj, "event") != "client-message") return null
-        val args = JsonScan.arrayOf(obj, listOf("args"))?.let { one.rarebit.heyarr.desktop.state.RecentSearches.parseStrings(it) } ?: return null
-        return if (args.firstOrNull() == "heyarr") args.getOrNull(1) else null
-    }
-
     fun apply(state: PlayerState, line: String): PlayerState {
         val obj = JsonScan.rootObject(line) ?: return state
         val event = JsonScan.stringField(obj, "event") ?: return state

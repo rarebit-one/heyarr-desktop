@@ -67,7 +67,7 @@ import one.rarebit.heyarr.desktop.ui.components.PrimaryButton
 import one.rarebit.heyarr.desktop.ui.components.SideNav
 import one.rarebit.heyarr.desktop.ui.components.ToastCard
 import one.rarebit.heyarr.desktop.ui.components.NowPlayingBar
-import one.rarebit.heyarr.desktop.ui.components.VideoSurfaceHost
+import one.rarebit.heyarr.desktop.ui.components.PlaybackHost
 import one.rarebit.heyarr.desktop.ui.screens.accentHex
 import one.rarebit.heyarr.desktop.ui.screens.DetailScreen
 import one.rarebit.heyarr.desktop.ui.screens.DetailState
@@ -128,7 +128,7 @@ fun App(
     val playerScreen = remember { PlayerScreenState() }
     val playback = session.playback
     val fullscreen = playback.fullscreen
-    fun setFullscreen(on: Boolean) { playback.fullscreen = on; onFullscreen(on); playback.player.overlayControls(on) }
+    fun setFullscreen(on: Boolean) { playback.fullscreen = on; onFullscreen(on) }
     val searchFocus = remember { FocusRequester() }
     var focusSearchTick by remember { mutableStateOf(0) }
     var want by remember { mutableStateOf<WantRequest?>(null) }
@@ -148,27 +148,16 @@ fun App(
         playback.baseUrl = session.config.baseUrl; playback.token = session.config.bearerToken.trim()
         playback.accentHex = accentHex(MediaThemes.of(playback.type).accent)
     }
-    // mpv's window gets the pointer; it echoes clicks and the keys the app must act on.
-    LaunchedEffect(Unit) {
-        playback.player.onMessage = { what ->
-            when (what) {
-                "fullscreen", "dblclick" -> setFullscreen(!playback.fullscreen)
-                "escape" -> if (playback.fullscreen) setFullscreen(false) else if (nav.current is Route.Player) nav.back()
-                "click" -> if (playback.onPlayerScreen) playback.player.togglePause()
-            }
-        }
-    }
-    // Player keys are handled at the window level. X keeps the keyboard on Java's focus proxy,
-    // so mpv never sees a key; and which Java component owns focus drifts as the transport
-    // hides and the surface is re-laid out — after an auto-hide nothing answered. A
-    // KeyEventDispatcher runs before focus-owner dispatch (even with no owner at all), so the
-    // player answers whenever its screen is up and no sheet is open.
+    // Player keys are handled at the window level: a KeyEventDispatcher runs before
+    // focus-owner dispatch (even with no owner at all), so the player answers whenever its
+    // screen is up and no sheet is open, whatever Compose node happens to hold focus.
     DisposableEffect(Unit) {
         val kfm = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
         val dispatcher = java.awt.KeyEventDispatcher { e ->
             if (e.id != java.awt.event.KeyEvent.KEY_PRESSED || e.isControlDown || e.isMetaDown || e.isAltDown) return@KeyEventDispatcher false
             if (!playback.onPlayerScreen || playback.popout || want != null || showConnection) return@KeyEventDispatcher false
             val key = PlayerKeys.fromAwt(e.keyCode) ?: return@KeyEventDispatcher false
+            playback.wakeControls()
             val handled = PlayerKeys.handle(
                 key, playback.player,
                 onFullscreen = { setFullscreen(!playback.fullscreen) },
@@ -248,7 +237,7 @@ fun App(
                         }
                     }
                 }
-                VideoSurfaceHost(session, onToggleFullscreen = { setFullscreen(!fullscreen) }, onBack = nav::back)
+                PlaybackHost(session)
                 Column(Modifier.align(Alignment.BottomEnd).padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
                     for (t in session.toasts.takeLast(4)) ToastCard(t, onDismiss = { session.dismiss(t) })
                 }

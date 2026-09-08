@@ -1,5 +1,18 @@
 package one.rarebit.heyarr.desktop.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.delay
+import one.rarebit.heyarr.desktop.ui.components.VideoSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,12 +65,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import one.rarebit.heyarr.desktop.heyarr.McpResult
@@ -94,7 +104,7 @@ class PlayerScreenState {
     var castOpen by mutableStateOf(false)
 }
 
-/** The keys the player answers to — one table for the Compose window and the AWT canvas alike. */
+/** The keys the player answers to, by Compose key; the window-level dispatcher maps AWT codes onto them. */
 object PlayerKeys {
     fun handle(key: Key, p: EmbeddedPlayer, onFullscreen: () -> Unit, onBack: () -> Unit, fullscreen: Boolean): Boolean = when (key) {
         Key.Spacebar, Key.K -> { p.togglePause(); true }
@@ -128,10 +138,13 @@ object PlayerKeys {
 }
 
 /**
- * The player screen: the picture (the shell's native surface placed over the box
- * below), our transport, and what's next. Playback belongs to the session, so leaving
- * this screen keeps it going in the now-playing bar; Back is just Back.
+ * The player screen: the picture (mpv's frames, a Compose element), our transport, and
+ * what's next. Fullscreen the transport floats over the picture and fades a few seconds
+ * after the pointer or keyboard last moved; the picture itself never moves. Playback
+ * belongs to the session, so leaving this screen keeps it going in the now-playing bar;
+ * Back is just Back.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenState, fullscreen: Boolean, onFullscreen: (Boolean) -> Unit, onBack: () -> Unit, onOpen: (Route) -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
@@ -145,45 +158,31 @@ fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenSt
 
     DisposableEffect(Unit) {
         playback.onPlayerScreen = true
-        onDispose { playback.onPlayerScreen = false; if (fullscreen) onFullscreen(false); playback.surfaceBounds = null }
+        onDispose { playback.onPlayerScreen = false; if (fullscreen) onFullscreen(false) }
     }
     LaunchedEffect(item.workId) {
         val a = session.api ?: return@LaunchedEffect
         session.io { a.assets(item.workId) }.onSuccess { list -> playback.queue = Series.seasons(list).flatMap { it.episodes } }
     }
-    fun toggleFullscreen() = onFullscreen(!fullscreen)
+    // Fullscreen: the transport shows on any activity and fades 3.5 s later while playing.
+    var controlsVisible by remember { mutableStateOf(true) }
+    LaunchedEffect(fullscreen, ps.paused, playback.controlsTick) {
+        controlsVisible = true
+        if (fullscreen && !ps.paused) { delay(3500); controlsVisible = false }
+    }
+    val overlayShowing = !fullscreen || controlsVisible || ps.paused
+    fun toggleFullscreen() { onFullscreen(!fullscreen); playback.wakeControls() }
+    val blankCursor = remember {
+        runCatching { PointerIcon(java.awt.Toolkit.getDefaultToolkit().createCustomCursor(java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB), java.awt.Point(0, 0), "blank")) }.getOrDefault(PointerIcon.Default)
+    }
 
     MediaScope(type) {
         val theme = LocalMediaTheme.current
-        Column(modifier.fillMaxSize().background(if (fullscreen) Color.Black else Tokens.bgBase)) {
-            if (!fullscreen) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                GhostButton(item.from, onBack, icon = Icons.Rounded.ArrowBack)
-                Column(Modifier.weight(1f)) {
-                    Text(item.title, style = MaterialTheme.typography.titleMedium, color = Tokens.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    item.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted, maxLines = 1) }
-                }
-                SecondaryButton(if (playback.popout) "Pop back in" else "Pop out", {
-                    scope.launch {
-                        if (playback.popout) { playback.popout = false; playback.pendingStart = true }
-                        else {
-                            playback.popout = true
-                            val err = session.io { if (p.isRunning) p.switchWindow(null) else p.start(null, one.rarebit.heyarr.desktop.heyarr.HeyarrApi.blobUrl(playback.baseUrl, item.blobHash), playback.token, playback.title(item), playback.accentHex) }.getOrNull()
-                            if (err != null) { session.toast(Toast.Kind.ERROR, "Couldn't pop out", err); playback.popout = false; playback.pendingStart = true }
-                        }
-                    }
-                }, icon = if (playback.popout) Icons.Rounded.Fullscreen else Icons.Rounded.OpenInNew, compact = true)
-                IconButtonRound(Icons.Rounded.Cast, "Play on a renderer", { state.castOpen = !state.castOpen; if (state.renderers == null) scope.launch { session.api?.let { a -> session.io { a.renderers() }.onSuccess { state.renderers = it } } } })
-                IconButtonRound(Icons.Rounded.Fullscreen, "Fullscreen (F)", ::toggleFullscreen, filled = true)
-            }
-            if (state.castOpen && !fullscreen) Box(Modifier.padding(horizontal = 24.dp)) { CastRow(session, state, item) }
 
-            // ── the picture: an empty box that reports where the native surface should be. Fullscreen it is
-            // the whole window; the controls then are mpv's OSC over the picture (see EmbeddedPlayer), so
-            // nothing below it appears or disappears and the picture never moves. ──
-            val videoModifier = if (fullscreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth().padding(horizontal = 24.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(Tokens.radiusCard))
-            Box(videoModifier.background(Color.Black).onGloballyPositioned { c ->
-                if (!playback.popout) { val pos = c.positionInRoot(); playback.surfaceBounds = IntRect(pos.x.toInt(), pos.y.toInt(), pos.x.toInt() + c.size.width, pos.y.toInt() + c.size.height) }
-            }) {
+        // ── the picture: a tap pauses, a double tap toggles fullscreen ──
+        @Composable
+        fun Picture(m: Modifier) {
+            Box(m.background(Color.Black).pointerInput(playback.popout) { detectTapGestures(onTap = { if (!playback.popout) p.togglePause() }, onDoubleTap = { toggleFullscreen() }) }) {
                 when {
                     headless -> { val art by session.artwork.rememberArtwork(null); Artwork(art, type, Modifier.fillMaxSize(), glyphSize = 64.dp); Text("mpv renders here", style = MaterialTheme.typography.labelMedium, color = Tokens.textMuted, modifier = Modifier.align(Alignment.Center).padding(top = 90.dp)) }
                     playback.popout -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -191,12 +190,16 @@ fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenSt
                         Text("Playing in a separate mpv window", style = MaterialTheme.typography.titleMedium, color = Tokens.textPrimary)
                         Text("The controls below still drive it; closing that window brings playback back in here.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
                     }
-                    playback.startError != null -> Box(Modifier.fillMaxSize().background(Tokens.bgBase.copy(alpha = 0.85f)), contentAlignment = Alignment.Center) { Notice("mpv could not start: ${playback.startError}", tone = Tokens.danger, modifier = Modifier.padding(32.dp)) }
+                    else -> VideoSurface(p, Modifier.fillMaxSize())
                 }
+                if (playback.startError != null) Box(Modifier.fillMaxSize().background(Tokens.bgBase.copy(alpha = 0.85f)), contentAlignment = Alignment.Center) { Notice("mpv could not start: ${playback.startError}", tone = Tokens.danger, modifier = Modifier.padding(32.dp)) }
             }
+        }
 
-            // ── the transport (windowed; fullscreen has mpv's OSC) ──
-            if (!fullscreen) Column(Modifier.fillMaxWidth().background(Tokens.bgBase).padding(horizontal = 24.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // ── the transport: beneath the picture windowed, over it fullscreen ──
+        @Composable
+        fun Transport(overlay: Boolean) {
+            Column(Modifier.fillMaxWidth().background(if (overlay) Color.Transparent else Tokens.bgBase).padding(horizontal = 24.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SeekBar(ps, onSeek = { p.seekFraction(it.toDouble()) })
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     IconButtonRound(Icons.Rounded.Replay10, "Back 10 seconds (←)", { p.seekBy(-10.0) }, size = 36.dp)
@@ -214,9 +217,58 @@ fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenSt
                     Spacer(Modifier.width(8.dp))
                     IconButtonRound(if (ps.muted || ps.volume <= 0) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp, if (ps.muted) "Unmute (M)" else "Mute (M)", { p.toggleMute() }, size = 32.dp)
                     Slider(value = (ps.volume / 100.0).toFloat().coerceIn(0f, 1.3f), onValueChange = { p.setVolume(it * 100.0) }, valueRange = 0f..1.3f, modifier = Modifier.width(110.dp).semantics { contentDescription = "Volume ${ps.volume.toInt()}%" }, colors = SliderDefaults.colors(thumbColor = theme.accent, activeTrackColor = theme.accent, inactiveTrackColor = Tokens.surface3))
-                    IconButtonRound(Icons.Rounded.Fullscreen, "Fullscreen (F)", ::toggleFullscreen, size = 40.dp, filled = true)
+                    IconButtonRound(if (fullscreen) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen, if (fullscreen) "Exit fullscreen (Esc)" else "Fullscreen (F)", ::toggleFullscreen, size = 40.dp, filled = !fullscreen)
                 }
             }
+        }
+
+        if (fullscreen) {
+            Box(
+                modifier.fillMaxSize().background(Color.Black)
+                    .onPointerEvent(PointerEventType.Move) { playback.wakeControls() }
+                    .pointerHoverIcon(if (overlayShowing) PointerIcon.Default else blankCursor, overrideDescendants = true),
+            ) {
+                Picture(Modifier.fillMaxSize())
+                AnimatedVisibility(overlayShowing, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.TopStart)) {
+                    Row(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.75f), Color.Transparent))).padding(horizontal = 24.dp, vertical = 16.dp).padding(bottom = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        GhostButton("Exit fullscreen", { toggleFullscreen() }, icon = Icons.Rounded.FullscreenExit)
+                        Column(Modifier.weight(1f)) {
+                            Text(item.title, style = MaterialTheme.typography.titleMedium, color = Tokens.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            item.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted, maxLines = 1) }
+                        }
+                    }
+                }
+                AnimatedVisibility(overlayShowing, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.BottomCenter)) {
+                    Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))).padding(top = 56.dp)) { Transport(overlay = true) }
+                }
+            }
+            return@MediaScope
+        }
+
+        Column(modifier.fillMaxSize().background(Tokens.bgBase)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                GhostButton(item.from, onBack, icon = Icons.Rounded.ArrowBack)
+                Column(Modifier.weight(1f)) {
+                    Text(item.title, style = MaterialTheme.typography.titleMedium, color = Tokens.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    item.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted, maxLines = 1) }
+                }
+                SecondaryButton(if (playback.popout) "Pop back in" else "Pop out", {
+                    scope.launch {
+                        if (playback.popout) { playback.popout = false; playback.pendingStart = true }
+                        else {
+                            playback.popout = true
+                            val err = session.io { if (p.isRunning) p.switchTo(embedded = false) else p.start(false, one.rarebit.heyarr.desktop.heyarr.HeyarrApi.blobUrl(playback.baseUrl, item.blobHash), playback.token, playback.title(item)) }.getOrNull()
+                            if (err != null) { session.toast(Toast.Kind.ERROR, "Couldn't pop out", err); playback.popout = false; playback.pendingStart = true }
+                        }
+                    }
+                }, icon = if (playback.popout) Icons.Rounded.Fullscreen else Icons.Rounded.OpenInNew, compact = true)
+                IconButtonRound(Icons.Rounded.Cast, "Play on a renderer", { state.castOpen = !state.castOpen; if (state.renderers == null) scope.launch { session.api?.let { a -> session.io { a.renderers() }.onSuccess { state.renderers = it } } } })
+                IconButtonRound(Icons.Rounded.Fullscreen, "Fullscreen (F)", ::toggleFullscreen, filled = true)
+            }
+            if (state.castOpen) Box(Modifier.padding(horizontal = 24.dp)) { CastRow(session, state, item) }
+
+            Picture(Modifier.fillMaxWidth().padding(horizontal = 24.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(Tokens.radiusCard)))
+            Transport(overlay = false)
 
             // ── up next: the one episode after this one ──
             val next = playback.next()

@@ -3,7 +3,6 @@ package one.rarebit.heyarr.desktop.state
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.unit.IntRect
 import one.rarebit.heyarr.desktop.heyarr.HeyarrApi
 import one.rarebit.heyarr.desktop.library.Episode
 import one.rarebit.heyarr.desktop.playback.EmbeddedPlayer
@@ -11,11 +10,11 @@ import one.rarebit.heyarr.desktop.theme.MediaType
 import one.rarebit.heyarr.desktop.ui.Route
 
 /**
- * What is playing, app-wide. One mpv lives for the whole session, rendering into ONE
- * native surface the shell owns (see `VideoSurfaceHost`); screens only say where that
- * surface should be. So leaving the player screen does not stop playback: the surface
- * shrinks into the now-playing bar's thumbnail, and music or a podcast keeps going
- * while you browse. Coming back grows it again. Closing the bar is what stops it.
+ * What is playing, app-wide. One mpv lives for the whole session (started by
+ * `PlaybackHost` at the root), producing frames any screen may draw with `VideoSurface`.
+ * So leaving the player screen does not stop playback: the now-playing bar shows the
+ * same picture small, and music or a podcast keeps going while you browse. Closing
+ * the bar is what stops it.
  */
 class PlaybackSession {
     val player = EmbeddedPlayer()
@@ -27,21 +26,21 @@ class PlaybackSession {
     /** The work's playable episodes, for "next". */
     var queue: List<Episode> by mutableStateOf(emptyList())
 
-    /** Where the native surface should sit, in window pixels; null hides it (1×1 off-screen). */
-    var surfaceBounds: IntRect? by mutableStateOf(null)
-
-    /** The player screen is showing (the surface is large); the bar hides itself then. */
+    /** The player screen is showing; the bar hides itself then. */
     var onPlayerScreen: Boolean by mutableStateOf(false)
 
     var fullscreen: Boolean by mutableStateOf(false)
+    /** Bumped by anything that should show the fullscreen transport again (a key, the pointer). */
+    var controlsTick: Int by mutableStateOf(0)
+        private set
+    fun wakeControls() { controlsTick++ }
     var popout: Boolean by mutableStateOf(false)
     var startError: String? by mutableStateOf(null)
-    var surfaceReady: Boolean by mutableStateOf(false)
 
     val active: Boolean get() = current != null
     val type: MediaType get() = current?.typeHint ?: MediaType.MOVIE
 
-    /** Begin (or replace) playback. The surface host starts mpv once it has a window id. */
+    /** Begin (or replace) playback. The host starts mpv when one is needed. */
     fun play(item: Route.Player) {
         val same = current?.assetId == item.assetId
         current = item
@@ -70,7 +69,7 @@ class PlaybackSession {
         popout = false
     }
 
-    /** Set by the surface host after it started mpv; cleared when a new item needs a start. */
+    /** Cleared by the host once it started mpv; set when a new item needs a start. */
     var pendingStart: Boolean by mutableStateOf(false)
     var baseUrl: String = ""
     var token: String = ""
