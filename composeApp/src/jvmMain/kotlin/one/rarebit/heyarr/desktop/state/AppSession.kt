@@ -10,7 +10,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import one.rarebit.heyarr.desktop.auth.Credential
 import one.rarebit.heyarr.desktop.heyarr.HeyarrApi
 import one.rarebit.heyarr.desktop.heyarr.McpResult
@@ -51,6 +53,9 @@ data class Toast(
  * Plain Compose state (the org's stance for this app; a ViewModel layer comes with the
  * shared module). Network work is launched on [Dispatchers.IO] through [io].
  */
+/** How long one liveness probe may take before it counts as no answer. */
+private const val PROBE_TIMEOUT_MS = 6_000L
+
 class AppSession(
     private val settings: SettingsStore,
     private val transport: HttpTransport,
@@ -130,21 +135,41 @@ class AppSession(
         }
     }
 
+    /**
+     * One liveness probe. A transport failure is answered by dropping the transport's
+     * connection pool and dialling once more before the node is called unreachable:
+     * after the machine changes network the pool holds connections to a network that
+     * is gone, and only a fresh dial can tell whether the node itself answers. Each
+     * attempt is bounded, so a dead pool costs seconds, not the request timeout.
+     */
     suspend fun probe() {
         val a = api
         if (a == null) { connection = Connection.UNCONFIGURED; return }
         val t0 = System.nanoTime()
-        val status = withContext(Dispatchers.IO) { runCatching { a.ping() }.getOrDefault(0) }
+        var status = attempt(a)
+        if (status == 0) { transport.reset(); status = attempt(a) }
         probes++
         lastLatencyMs = (System.nanoTime() - t0) / 1_000_000
         connection = Connection.fromProbe(status)
-        if (status == 200) lastOkAt = System.currentTimeMillis() else failures++
+        if (status == 200) { lastOkAt = System.currentTimeMillis(); lastFailure = null } else failures++
     }
 
-    /** Called by any screen whose call died on the transport — flips the banner immediately. */
+    private suspend fun attempt(a: HeyarrApi): Int =
+        withTimeoutOrNull(PROBE_TIMEOUT_MS) {
+            runCatching { runInterruptible(Dispatchers.IO) { a.ping() } }
+                .onFailure { lastFailure = it.message ?: it.javaClass.simpleName }
+                .getOrDefault(0)
+        } ?: run { lastFailure = "no answer within ${PROBE_TIMEOUT_MS / 1000} s"; 0 }
+
+    /**
+     * Called by any screen whose call died on the transport — flips the banner
+     * immediately. A failure with no HTTP status is the transport itself, so its
+     * pool is dropped too: the next call, and the next heartbeat, dial fresh.
+     */
     fun noteTransportFailure(e: McpTransportException) {
         failures++
         lastFailure = e.message
+        if (e.status == null) transport.reset()
         connection = if (e.status == 401 || e.status == 403) Connection.UNAUTHORIZED else Connection.OFFLINE
     }
 

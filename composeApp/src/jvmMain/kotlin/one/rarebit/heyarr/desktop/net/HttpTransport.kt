@@ -31,6 +31,14 @@ interface HttpTransport {
     fun delete(url: String, headers: Map<String, String> = emptyMap()): HttpResponse =
         HttpResponse(405, "")
 
+    /**
+     * Forget any pooled connection. After the machine changes network — a laptop
+     * leaving the LAN for a VPN — a pooled connection to the old network is dead but
+     * not closed; every request on it waits for its timeout. A transport that pools
+     * drops the pool here; a fake has nothing to drop.
+     */
+    fun reset() {}
+
     /** PATCH — defaulted to a 405 for the same reason as [delete]. */
     fun patch(
         url: String,
