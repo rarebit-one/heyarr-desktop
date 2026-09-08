@@ -3,6 +3,9 @@ package one.rarebit.heyarr.desktop
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import one.rarebit.heyarr.desktop.mcp.McpTransportException
 import one.rarebit.heyarr.desktop.net.HttpResponse
@@ -85,6 +88,37 @@ class ProbeRecoveryTest {
         assertEquals(Connection.OFFLINE, s.connection)
         assertEquals(1, transport.resets)
         assertEquals("no route to host", s.lastFailure)
+    }
+
+    @Test
+    fun aCancelledProbeLeavesNothingBehind() = runBlocking {
+        val transport = object : HttpTransport {
+            override fun get(url: String, headers: Map<String, String>): HttpResponse { Thread.sleep(10_000); return HttpResponse(200, "") }
+            override fun post(url: String, body: String?, contentType: String?, headers: Map<String, String>): HttpResponse = HttpResponse(405, "")
+        }
+        val s = session(transport)
+
+        val job = launch(Dispatchers.Default) { s.probe() }
+        delay(200)
+        job.cancelAndJoin()
+
+        assertEquals(Connection.UNKNOWN, s.connection, "a probe that never finished says nothing about the node")
+        assertNull(s.lastFailure, "cancellation is not a failure")
+        assertEquals(0, s.probes)
+    }
+
+    @Test
+    fun aRefusedTokenIsRecordedAsTheReason() = runBlocking {
+        val transport = object : HttpTransport {
+            override fun get(url: String, headers: Map<String, String>): HttpResponse = HttpResponse(401, "")
+            override fun post(url: String, body: String?, contentType: String?, headers: Map<String, String>): HttpResponse = HttpResponse(405, "")
+        }
+        val s = session(transport)
+
+        s.probe()
+
+        assertEquals(Connection.UNAUTHORIZED, s.connection)
+        assertEquals("HTTP 401 from the node", s.lastFailure)
     }
 
     @Test

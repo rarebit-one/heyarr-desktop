@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -151,14 +152,26 @@ class AppSession(
         probes++
         lastLatencyMs = (System.nanoTime() - t0) / 1_000_000
         connection = Connection.fromProbe(status)
-        if (status == 200) { lastOkAt = System.currentTimeMillis(); lastFailure = null } else failures++
+        when (status) {
+            200 -> { lastOkAt = System.currentTimeMillis(); lastFailure = null }
+            0 -> failures++
+            else -> { failures++; lastFailure = "HTTP $status from the node" }
+        }
     }
 
+    // A cancelled probe (the heartbeat restarting on a new configuration) is not a failure
+    // and must not leave its message behind for the probe that replaced it: cancellation
+    // propagates, everything else is the transport's answer.
     private suspend fun attempt(a: HeyarrApi): Int =
         withTimeoutOrNull(PROBE_TIMEOUT_MS) {
-            runCatching { runInterruptible(Dispatchers.IO) { a.ping() } }
-                .onFailure { lastFailure = it.message ?: it.javaClass.simpleName }
-                .getOrDefault(0)
+            try {
+                runInterruptible(Dispatchers.IO) { a.ping() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                lastFailure = e.message ?: e.javaClass.simpleName
+                0
+            }
         } ?: run { lastFailure = "no answer within ${PROBE_TIMEOUT_MS / 1000} s"; 0 }
 
     /**
