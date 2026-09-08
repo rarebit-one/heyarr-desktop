@@ -72,7 +72,10 @@ import one.rarebit.heyarr.desktop.ui.screens.accentHex
 import one.rarebit.heyarr.desktop.ui.screens.DetailScreen
 import one.rarebit.heyarr.desktop.ui.screens.DetailState
 import one.rarebit.heyarr.desktop.ui.screens.Field
+import one.rarebit.heyarr.desktop.ui.screens.DiscoverScreen
+import one.rarebit.heyarr.desktop.ui.screens.DiscoverState
 import one.rarebit.heyarr.desktop.ui.screens.HomeScreen
+import one.rarebit.heyarr.desktop.ui.screens.WantByTitle
 import one.rarebit.heyarr.desktop.ui.screens.HomeState
 import one.rarebit.heyarr.desktop.ui.screens.LibraryScreen
 import one.rarebit.heyarr.desktop.ui.screens.LibraryState
@@ -88,7 +91,7 @@ import one.rarebit.heyarr.desktop.ui.screens.SettingsScreen
 import one.rarebit.heyarr.desktop.ui.screens.SettingsState
 
 /** A pending Want: either an existing work by id, or a title the library has never seen. */
-data class WantRequest(val workId: String?, val title: String)
+data class WantRequest(val workId: String?, val title: String, val year: Int? = null, val type: MediaType = MediaType.MOVIE)
 
 /**
  * The shell: left nav, offline banner, the routed screen, the toast stack and the Want
@@ -120,6 +123,7 @@ fun App(
     val nav = remember { Nav(initialRoute) }
     val search = remember { SearchController(scope, { session.api }, session::noteTransportFailure) }
     val home = remember { HomeState() }
+    val discover = remember { DiscoverState() }
     val library = remember { LibraryState().apply { tab = initialLibraryTab } }
     val missing = remember { MissingState() }
     val nowPlaying = remember { NowPlayingState() }
@@ -136,6 +140,8 @@ fun App(
     val connectionState = remember { ConnectionState() }
 
     LaunchedEffect(Unit) { session.startHeartbeat(); session.refreshIndex(); initialQuery?.let { search.updateQuery(it) } }
+    // A different node means different work ids: the per-work detail caches are worthless.
+    LaunchedEffect(session.generation) { if (session.generation > 0) details.clear() }
     LaunchedEffect(focusSearchTick) { if (focusSearchTick > 0) runCatching { searchFocus.requestFocus() } }
 
     fun openSearch() { nav.go(Route.Search); focusSearchTick++ }
@@ -222,10 +228,11 @@ fun App(
                                 else -> {}
                             }
                             val onWant: (String, String) -> Unit = { id, title -> want = WantRequest(id, title) }
+                            val onWantTitle: WantByTitle = { title, year, type -> want = WantRequest(null, title, year, type) }
                             Box(Modifier.weight(1f)) { when (val r = current) {
                                 Route.Home -> HomeScreen(session, home, ::go, onWant)
-                                Route.Discover -> HomeScreen(session, home, ::go, onWant, discover = true)
-                                Route.Search -> SearchScreen(session, search, ::go, onWant, searchFocus)
+                                Route.Discover -> DiscoverScreen(session, discover, onWantTitle)
+                                Route.Search -> SearchScreen(session, search, ::go, onWant, onWantTitle, searchFocus)
                                 Route.Library -> LibraryScreen(session, library, ::go, onWant)
                                 Route.Missing -> MissingScreen(session, missing, ::go, onWantTitle = { want = WantRequest(null, "") })
                                 Route.NowPlaying -> NowPlayingScreen(session, nowPlaying)
@@ -257,8 +264,8 @@ fun App(
 private fun WantSheet(session: AppSession, req: WantRequest, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     var title by remember { mutableStateOf(req.title) }
-    var year by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf(MediaType.MOVIE) }
+    var year by remember { mutableStateOf(req.year?.toString() ?: "") }
+    var type by remember { mutableStateOf(req.type) }
     var profile by remember(session.profiles) { mutableStateOf(session.profiles.firstOrNull { it.name == "everyday" }?.name ?: session.profiles.firstOrNull()?.name ?: "") }
     var monitor by remember { mutableStateOf(true) }
     var reason by remember { mutableStateOf("") }
@@ -286,7 +293,7 @@ private fun WantSheet(session: AppSession, req: WantRequest, onClose: () -> Unit
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PrimaryButton("Want", {
                         val a = session.api ?: return@PrimaryButton
-                        if (!byTitle) { session.want(req.workId!!, req.title, profile) { onClose() }; return@PrimaryButton }
+                        if (!byTitle) { session.want(req.workId!!, req.title, profile, monitor, reason.ifBlank { null }) { onClose() }; return@PrimaryButton }
                         busy = true
                         scope.launch {
                             session.io { a.wantTitle(title.trim(), type, profile, year.toIntOrNull(), monitor, reason.ifBlank { null }) }.onSuccess { r ->

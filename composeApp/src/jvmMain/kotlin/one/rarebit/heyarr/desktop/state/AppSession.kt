@@ -25,7 +25,14 @@ import one.rarebit.heyarr.desktop.settings.SettingsStore
 import one.rarebit.heyarr.desktop.theme.Appearance
 
 /** Whether heyarr can be reached right now — drives the offline banner. */
-enum class Connection { UNKNOWN, ONLINE, OFFLINE, UNAUTHORIZED, UNCONFIGURED }
+enum class Connection {
+    UNKNOWN, ONLINE, OFFLINE, UNAUTHORIZED, UNCONFIGURED;
+
+    companion object {
+        /** What one liveness probe says: its HTTP status, or 0 when the transport failed. A refused credential is not "offline". */
+        fun fromProbe(status: Int): Connection = when (status) { 200 -> ONLINE; 401, 403 -> UNAUTHORIZED; else -> OFFLINE }
+    }
+}
 
 /** A typed toast: what happened, and — for a refusal — the tool and its rule text, verbatim. */
 data class Toast(
@@ -96,11 +103,17 @@ class AppSession(
 
     // ── config ───────────────────────────────────────────────────────────────────
 
+    /** Bumped when the node (URL or token) changes; screens that cache a node's answers reload on it. */
+    var generation: Int by mutableStateOf(0)
+        private set
+
     fun save(updated: DesktopConfig) {
         settings.save(updated)
+        val otherNode = updated.baseUrl != config.baseUrl || updated.bearerToken != config.bearerToken
         config = updated
         artwork.reset()
         connection = if (updated.bearerToken.isBlank()) Connection.UNCONFIGURED else Connection.UNKNOWN
+        if (otherNode) { profiles = emptyList(); index = LibraryIndex.EMPTY; generation++ }
         refreshIndex()
         startHeartbeat()
     }
@@ -121,10 +134,11 @@ class AppSession(
         val a = api
         if (a == null) { connection = Connection.UNCONFIGURED; return }
         val t0 = System.nanoTime()
-        val ok = withContext(Dispatchers.IO) { runCatching { a.ping() }.getOrDefault(false) }
+        val status = withContext(Dispatchers.IO) { runCatching { a.ping() }.getOrDefault(0) }
         probes++
         lastLatencyMs = (System.nanoTime() - t0) / 1_000_000
-        if (ok) { lastOkAt = System.currentTimeMillis(); connection = Connection.ONLINE } else { failures++; connection = Connection.OFFLINE }
+        connection = Connection.fromProbe(status)
+        if (status == 200) lastOkAt = System.currentTimeMillis() else failures++
     }
 
     /** Called by any screen whose call died on the transport — flips the banner immediately. */
@@ -150,12 +164,12 @@ class AppSession(
     }
 
     /** Optimistic want: the row flips to Wanted at once and rolls back with the refusal on failure. */
-    fun want(workId: String, title: String, profile: String, onDone: (McpResult<*>?) -> Unit = {}) {
+    fun want(workId: String, title: String, profile: String, monitor: Boolean = true, reason: String? = null, onDone: (McpResult<*>?) -> Unit = {}) {
         val a = api ?: return
         val before = index
         index = index.withPendingWant(workId, profiles.firstOrNull { it.name == profile }?.id)
         scope.launch {
-            val result = io { a.wantWork(workId, profile) }
+            val result = io { a.wantWork(workId, profile, monitor, reason) }
             result.onFailure { index = before; onDone(null) }
             result.onSuccess { r ->
                 when (r) {

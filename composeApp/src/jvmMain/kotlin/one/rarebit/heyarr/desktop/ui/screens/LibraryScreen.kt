@@ -54,6 +54,8 @@ val MEDIA = MediaType.UNKNOWN
 private val MEDIA_KINDS = setOf(MediaType.MOVIE, MediaType.SERIES, MediaType.MUSIC, MediaType.BOOK, MediaType.AUDIOBOOK, MediaType.PODCAST)
 
 class LibraryState {
+    /** The session generation this state was loaded for. */
+    var generation = -1
     var tab by mutableStateOf(0)
     val downloads = DownloadsState()
     var works by mutableStateOf<List<Work>?>(null)
@@ -81,7 +83,8 @@ fun LibraryScreen(session: AppSession, state: LibraryState, onOpen: (Route) -> U
             state.loading = false
         }
     }
-    LaunchedEffect(session.config) { if (state.works == null) load() }
+    // Loaded once per node: a new URL or token (session.generation) throws the cached answer away.
+    LaunchedEffect(session.generation) { if (state.works == null || state.generation != session.generation) { state.generation = session.generation; load() } }
 
     val variants = remember(state.works) { Variants.variantIds(state.works.orEmpty()) }
     val all = state.works.orEmpty().filter { it.id !in variants }

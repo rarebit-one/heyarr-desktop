@@ -51,6 +51,8 @@ import one.rarebit.heyarr.desktop.ui.components.SecondaryButton
 import one.rarebit.heyarr.desktop.ui.components.SectionHeader
 
 class MissingState {
+    /** The session generation this state was loaded for. */
+    var generation = -1
     var missing by mutableStateOf<List<Want>?>(null)
     var upgrades by mutableStateOf<List<Want>?>(null)
     var error by mutableStateOf<String?>(null)
@@ -73,7 +75,8 @@ fun MissingScreen(session: AppSession, state: MissingState, onOpen: (Route) -> U
         scope.launch { session.io { a.missing() }.fold(onSuccess = { state.missing = it }, onFailure = { state.error = it.message }) }
         scope.launch { session.io { a.upgradeCandidates() }.fold(onSuccess = { state.upgrades = it }, onFailure = { state.error = it.message }) }
     }
-    LaunchedEffect(session.config) { if (state.missing == null) load() }
+    // Loaded once per node: a new URL or token (session.generation) throws the cached answer away.
+    LaunchedEffect(session.generation) { if (state.missing == null || state.generation != session.generation) { state.generation = session.generation; load() } }
 
     val list = (if (state.tab == 0) state.missing else state.upgrades)
     val sel = state.selected.filter { id -> list?.any { it.desiredItemId == id } == true }.toSet()

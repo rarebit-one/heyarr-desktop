@@ -50,6 +50,8 @@ import one.rarebit.heyarr.desktop.ui.components.SectionHeader
 import one.rarebit.heyarr.desktop.ui.components.Skeleton
 
 class NowPlayingState {
+    /** The session generation this state was loaded for. */
+    var generation = -1
     var renderers by mutableStateOf<List<Renderer>?>(null)
     var error by mutableStateOf<String?>(null)
     var selected by mutableStateOf<Renderer?>(null)
@@ -76,7 +78,8 @@ fun NowPlayingScreen(session: AppSession, state: NowPlayingState, modifier: Modi
             )
         }
     }
-    LaunchedEffect(session.config) { if (state.renderers == null) load() }
+    // Loaded once per node: a new URL or token (session.generation) throws the cached answer away.
+    LaunchedEffect(session.generation) { if (state.renderers == null || state.generation != session.generation) { state.generation = session.generation; load() } }
     LaunchedEffect(state.selected?.udn, session.config) {
         val r = state.selected ?: return@LaunchedEffect
         val a = session.api ?: return@LaunchedEffect

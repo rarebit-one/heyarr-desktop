@@ -30,6 +30,7 @@ fun main(args: Array<String>) {
         "01-home" to Route.Home,
         "02-search-idle" to Route.Search,
         "02-search-results" to Route.Search,
+        "02b-discover" to Route.Discover,
         "03-detail-series-watch" to Route.Detail(Fixtures.YELLOWSTONE, MediaType.SERIES, "Yellowstone", from = "Home"),
         "03b-detail-series-curate" to Route.Detail(Fixtures.YELLOWSTONE, MediaType.SERIES, "Yellowstone", from = "Home", curate = true),
         "04-detail-movie-missing" to Route.Detail(Fixtures.SINTEL, MediaType.MOVIE, "Sintel", from = "Missing"),

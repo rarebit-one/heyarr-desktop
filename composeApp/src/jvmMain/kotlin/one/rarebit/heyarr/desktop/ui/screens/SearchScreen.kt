@@ -92,6 +92,7 @@ fun SearchScreen(
     search: SearchController,
     onOpen: (Route) -> Unit,
     onWant: (workId: String, title: String) -> Unit,
+    onWantTitle: WantByTitle,
     focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
@@ -129,7 +130,7 @@ fun SearchScreen(
         }
         when {
             search.isIdle -> IdlePane(recent, onPick = { search.updateQuery(it) }, onClear = { session.recent.clear(); recent = emptyList() })
-            SearchGrouping.empty(sections) -> NoResultsPane(session, search.query, onWant)
+            SearchGrouping.empty(sections) -> NoResultsPane(session, search.query, onWantTitle)
             else -> LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxSize()) {
                 var index = 0
                 for (section in sections) {
@@ -249,9 +250,10 @@ private fun IdlePane(recent: List<String>, onPick: (String) -> Unit, onClear: ()
 
 /** No library match: offer the honest next step — ask the metadata provider, quoting its refusal when there is none. */
 @Composable
-private fun NoResultsPane(session: AppSession, query: String, onWant: (String, String) -> Unit) {
+private fun NoResultsPane(session: AppSession, query: String, onWantTitle: WantByTitle) {
     val scope = rememberCoroutineScope()
     var discovery by remember(query) { mutableStateOf<McpResult<List<DiscoveryHit>>?>(null) }
+    var asked by remember(query) { mutableStateOf(false) }
     var busy by remember(query) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         EmptyState(
@@ -259,18 +261,11 @@ private fun NoResultsPane(session: AppSession, query: String, onWant: (String, S
             action = {
                 SecondaryButton("Ask the metadata provider", icon = Icons.Rounded.TravelExplore, enabled = !busy, onClick = {
                     val a = session.api ?: return@SecondaryButton
-                    busy = true
-                    scope.launch { session.io { a.discover(query) }.onSuccess { discovery = it }; busy = false }
+                    busy = true; asked = true
+                    scope.launch { discovery = session.io { a.discover(query) }.getOrNull(); busy = false }
                 })
             },
         )
-        when (val d = discovery) {
-            null -> {}
-            is McpResult.Refused -> Notice("discover_content: ${d.message}", detail = "Discovery needs a TVDB provider configured on the node (ADR-0058). Wanting by title still works.")
-            is McpResult.Ok -> if (d.value.isEmpty()) Text("The provider found nothing for “$query”.", color = Tokens.textMuted, style = MaterialTheme.typography.bodyMedium)
-            else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                for (hit in d.value) MediaRow(hit.title, MediaType.SERIES, onOpen = {}, subtitle = hit.overview, meta = listOf(hit.year?.toString(), hit.tvdbId?.let { "tvdb $it" }), status = LibraryStatus.NOT_TRACKED)
-            }
-        }
+        if (asked) DiscoveryResults(query, discovery, busy, onWantTitle)
     }
 }

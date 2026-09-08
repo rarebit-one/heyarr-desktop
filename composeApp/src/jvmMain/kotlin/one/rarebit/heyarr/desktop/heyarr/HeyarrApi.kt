@@ -253,11 +253,11 @@ class HeyarrApi(
     fun candidates(desiredItemId: String): CandidateList? =
         CandidateJson.parse(get("$baseUrl/api/v1/desired/${enc(desiredItemId)}/candidates", "GET /desired/{id}/candidates"))
 
-    /** A cheap liveness probe for the offline banner: one authenticated page of one work. */
-    fun ping(): Boolean = try {
-        http.get("$baseUrl/api/v1/works?limit=1", credential.asHeader()).status == 200
+    /** A cheap liveness probe for the offline banner: one authenticated page of one work. The HTTP status, or 0 when the transport failed. */
+    fun ping(): Int = try {
+        http.get("$baseUrl/api/v1/works?limit=1", credential.asHeader()).status
     } catch (e: IOException) {
-        false
+        0
     }
 
     // ── plumbing ─────────────────────────────────────────────────────────────────

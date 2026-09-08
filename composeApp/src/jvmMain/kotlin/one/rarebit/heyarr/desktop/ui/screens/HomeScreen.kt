@@ -61,7 +61,7 @@ class HomeState {
 }
 
 /**
- * Home / Discover — a media-mixed spotlight over themed rails. Spotlight and "Recently
+ * Home — a media-mixed spotlight over themed rails. Spotlight and "Recently
  * added" come from the works list (recent first, artwork preferred); the per-type rails
  * from `search_content` by content type; "Wanted but missing" and "Could be better"
  * from `get_missing_content` / `get_upgrade_candidates`; "Following" from
@@ -69,7 +69,7 @@ class HomeState {
  * playback history — so none is shown.
  */
 @Composable
-fun HomeScreen(session: AppSession, state: HomeState, onOpen: (Route) -> Unit, onWant: (String, String) -> Unit, modifier: Modifier = Modifier, discover: Boolean = false) {
+fun HomeScreen(session: AppSession, state: HomeState, onOpen: (Route) -> Unit, onWant: (String, String) -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
 
     fun load() {
@@ -109,13 +109,6 @@ fun HomeScreen(session: AppSession, state: HomeState, onOpen: (Route) -> Unit, o
 
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 32.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(36.dp)) {
         item { SpotlightBlock(session, state, onOpen, onWant) }
-        if (discover) item {
-            Notice(
-                "Discover asks the metadata provider for content the library does not hold.",
-                detail = "This node has no TVDB provider configured (ADR-0058), so discovery answers with a refusal. Search still finds everything already catalogued, and Missing lets you Want a title the library has never seen.",
-                icon = Icons.Rounded.Info,
-            )
-        }
         val cont = state.continueRail
         if (cont !is RailState.Loaded || cont.items.isNotEmpty()) item {
             Rail("Continue", cont, subtitle = "Unfinished playback sessions this node recorded — not history, just where a device stopped", emptyText = "", skeletonAspect = Aspect.SQUARE, skeletonWidth = 240.dp, key = { it.sessionId }) { e ->
