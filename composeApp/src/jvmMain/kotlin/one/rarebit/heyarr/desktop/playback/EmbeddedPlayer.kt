@@ -87,6 +87,8 @@ class EmbeddedPlayer(
     private var lastUrl: String? = null
     private var lastToken: String? = null
     private var lastTitle: String? = null
+    /** External subtitle URLs already `sub-add`ed to the current file, so re-applying is idempotent. */
+    private val appliedSubs = mutableListOf<String>()
 
     /**
      * Start mpv and load [url]. [embedded] runs libmpv in-process, rendering into the
@@ -161,6 +163,7 @@ class EmbeddedPlayer(
     /** Replace what is playing (the token was given at start; mpv keeps its header option). */
     fun load(url: String, title: String) {
         lastUrl = url; lastTitle = title
+        appliedSubs.clear()   // a new file drops the old file's external subtitles
         state = state.copy(loaded = false, position = 0.0, duration = 0.0, eof = false, error = null, title = title, subtitles = emptyList(), audio = emptyList())
         send("set_property", "force-media-title", title)
         send("loadfile", url)
@@ -200,6 +203,24 @@ class EmbeddedPlayer(
     fun toggleMute() = send("cycle", "mute")
     fun setSubtitle(id: Int?) = send("set_property", "sid", id ?: "no")
     fun cycleSubtitle() = send("cycle", "sub")
+
+    /**
+     * Attach heyarr subtitle-sidecar blob URLs to the CURRENT file as external tracks
+     * (mpv `sub-add`). They ride the same `http-header-fields` bearer the video does, so
+     * the authenticated blob fetch just works, and land in `track-list` as `external`
+     * tracks — exactly what the CC picker labels "sidecar file". The first is selected so
+     * captions show; the rest are added selectable-but-off. Idempotent and a no-op until
+     * the socket is up, so callers may invoke it on both start and queue-load without
+     * double-adding; [load] clears the set when the file changes.
+     */
+    fun addExternalSubtitles(urls: List<String>) {
+        if (channel?.isOpen != true) return
+        for (u in urls) {
+            if (u.isBlank() || u in appliedSubs) continue
+            send("sub-add", u, if (appliedSubs.isEmpty()) "select" else "auto")
+            appliedSubs.add(u)
+        }
+    }
     fun setAudio(id: Int) = send("set_property", "aid", id)
     fun stop() = send("stop")
 
@@ -216,6 +237,7 @@ class EmbeddedPlayer(
         process?.let { p -> if (!p.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)) p.destroyForcibly() }
         process = null
         socketPath?.delete()
+        appliedSubs.clear()
         state = PlayerState()
     }
 

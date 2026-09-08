@@ -57,6 +57,6 @@ fun PlaybackHost(session: AppSession) {
         }.getOrNull()
         playback.pendingStart = false
         playback.startError = err
-        if (err == null) playback.player.play()
+        if (err == null) { playback.player.play(); playback.refreshSubtitles() }
     }
 }

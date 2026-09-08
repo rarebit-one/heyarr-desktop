@@ -48,7 +48,23 @@ class PlaybackSession {
         if (same && player.isRunning) { player.play(); return }
         if (player.isRunning && !popout) player.load(HeyarrApi.blobUrl(baseUrl, item.blobHash), title(item))
         else pendingStart = true
+        refreshSubtitles()   // adds now if the queue is already known + player up; else a no-op re-run does it
     }
+
+    /** The subtitle-sidecar blob URLs for [item], from its episode in the loaded [queue] (empty when unknown yet). */
+    private fun subtitleUrlsFor(item: Route.Player): List<String> =
+        queue.firstOrNull { it.asset.id == item.assetId }
+            ?.subtitles.orEmpty()
+            .mapNotNull { it.blobHash }
+            .map { HeyarrApi.blobUrl(baseUrl, it) }
+
+    /**
+     * Attach the current item's `.srt`/`.vtt` sidecars to the running player. Idempotent
+     * and safe before the player is up or the queue has loaded, so the two producers of
+     * that knowledge — the host that starts mpv and the screen that fetches the assets —
+     * both call it and whichever completes last wins.
+     */
+    fun refreshSubtitles() { current?.let { player.addExternalSubtitles(subtitleUrlsFor(it)) } }
 
     fun next(): Route.Player? {
         val c = current ?: return null
