@@ -776,7 +776,17 @@ private fun CurateTab(session: AppSession, detail: WorkDetail, type: MediaType, 
                 when (c) {
                     0 -> Cell(w.id.takeIf { it.startsWith("pending:") }?.let { "sending…" } ?: w.scope, muted = true)
                     1 -> Cell(session.profiles.firstOrNull { it.id == w.qualityProfileId }?.name ?: w.qualityProfileId ?: "?", mono = true)
-                    2 -> StatusPill(LibraryStatus.ofState(w.state))
+                    2 -> Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        StatusPill(LibraryStatus.ofState(w.state))
+                        // While a transfer is in flight, how far it has got.
+                        w.downloadProgress?.let { p ->
+                            Text(
+                                "${(p * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Tokens.textMuted,
+                            )
+                        }
+                    }
                     3 -> Text(sat?.contentSatisfaction?.replace('_', ' ') ?: (w.content ?: "…"), style = MaterialTheme.typography.labelMedium, color = verdictColor(if ((sat?.contentSatisfaction ?: w.content) == "satisfied") "pass" else "fail"))
                     4 -> Cell(sat?.let { if (it.placementUnproven) "unproven (single node)" else it.placementSatisfaction } ?: (w.placement ?: "…"), muted = true)
                     5 -> Cell(sat?.let { (if (it.upgradeEligible) "eligible" else it.upgradeStatus.replace('_', ' ')) + (it.upgradeDetail.takeIf { d -> d.isNotBlank() }?.let { d -> " — $d" } ?: "") } ?: (w.detail ?: ""), muted = true, maxLines = 2)
