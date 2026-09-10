@@ -43,8 +43,17 @@ data class DesiredItem(
     val content: String?,
     val placement: String?,
     val detail: String?,
+    val bytesTotal: Long? = null,
+    val bytesDone: Long? = null,
     val updatedAt: String?,
-)
+) {
+    /** Fraction 0f..1f of the in-flight transfer that is done, or null when
+     *  there is no transfer or the client has not reported a size yet. */
+    val downloadProgress: Float?
+        get() = bytesTotal?.takeIf { it > 0 }?.let { total ->
+            ((bytesDone ?: 0L).toFloat() / total).coerceIn(0f, 1f)
+        }
+}
 
 object DesiredItemJson {
     fun list(body: String): List<DesiredItem> =
@@ -71,6 +80,8 @@ object DesiredItemJson {
             content = acq?.let { JsonScan.stringField(it, "content") },
             placement = acq?.let { JsonScan.stringField(it, "placement") },
             detail = acq?.let { JsonScan.stringField(it, "detail") },
+            bytesTotal = acq?.let { JsonScan.longField(it, "bytes_total") },
+            bytesDone = acq?.let { JsonScan.longField(it, "bytes_done") },
             updatedAt = JsonScan.stringField(obj, "updated_at"),
         )
     }
