@@ -774,7 +774,7 @@ private fun CurateTab(session: AppSession, detail: WorkDetail, type: MediaType, 
                 val w = wants[r]
                 val sat = (state.satisfaction[w.id] as? McpResult.Ok)?.value
                 when (c) {
-                    0 -> Cell(w.id.takeIf { it.startsWith("pending:") }?.let { "sending…" } ?: (w.detail?.let { "" } ?: "").ifBlank { if (w.qualityProfileId != null) "work" else "" }, muted = true)
+                    0 -> Cell(w.id.takeIf { it.startsWith("pending:") }?.let { "sending…" } ?: w.scope, muted = true)
                     1 -> Cell(session.profiles.firstOrNull { it.id == w.qualityProfileId }?.name ?: w.qualityProfileId ?: "?", mono = true)
                     2 -> StatusPill(LibraryStatus.ofState(w.state))
                     3 -> Text(sat?.contentSatisfaction?.replace('_', ' ') ?: (w.content ?: "…"), style = MaterialTheme.typography.labelMedium, color = verdictColor(if ((sat?.contentSatisfaction ?: w.content) == "satisfied") "pass" else "fail"))
