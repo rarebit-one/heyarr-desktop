@@ -133,7 +133,11 @@ class EmbeddedPlayer(
         val h = lib.mpv_create() ?: return "libmpv could not create a player"
         val options = listOf(
             "vo" to "libmpv", "input-ipc-server" to sock.absolutePath, "idle" to "yes", "keep-open" to "yes", "terminal" to "no",
-            "msg-level" to "all=error", "osc" to "no", "osd-level" to "0", "input-default-bindings" to "no", "hwdec" to "no",
+            // `auto-copy`, not `no`: 4K HEVC software-decodes far too slowly here and stutters. auto-copy
+            // decodes on the GPU (the expensive part) then copies frames back to system memory, which is what
+            // this frame-readback renderer needs — plain `auto` would hand back GPU-only frames it cannot read.
+            // It falls back to software when no hardware decoder is available, so it is safe on every machine.
+            "msg-level" to "all=error", "osc" to "no", "osd-level" to "0", "input-default-bindings" to "no", "hwdec" to "auto-copy",
             "http-header-fields" to "Authorization: Bearer $token", "force-media-title" to title,
         ) + listOfNotNull(start?.let { "start" to it.toString() })
         for ((k, v) in options) lib.mpv_set_option_string(h, k, v)
