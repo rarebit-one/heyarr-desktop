@@ -15,6 +15,7 @@ import kotlinx.coroutines.delay
 import one.rarebit.heyarr.desktop.ui.components.VideoSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -63,7 +64,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -348,11 +351,26 @@ internal fun languageName(code: String?): String? {
 private fun SeekBar(ps: PlayerState, onSeek: (Float) -> Unit) {
     val theme = LocalMediaTheme.current
     var dragging by remember { mutableStateOf<Float?>(null) }
-    Slider(
-        value = dragging ?: ps.fraction, onValueChange = { dragging = it }, onValueChangeFinished = { dragging?.let(onSeek); dragging = null },
-        modifier = Modifier.fillMaxWidth().height(24.dp).semantics { contentDescription = "Position ${clock(ps.position)} of ${clock(ps.duration)}" },
-        colors = SliderDefaults.colors(thumbColor = theme.accentGradientEnd, activeTrackColor = theme.accent, inactiveTrackColor = Tokens.surface3), enabled = ps.duration > 0,
-    )
+    val buffered = ps.bufferedFraction
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        // Behind the Slider: the inactive rail, and over it a lighter band as far
+        // as the stream has cached ahead. Inset by the thumb radius so it lines up
+        // with the track the Slider paints the played portion onto. The Slider's
+        // own inactive track is transparent (so this shows through) but it still
+        // owns the active track and the thumb, so dragging stays pixel-accurate.
+        Canvas(Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(4.dp)) {
+            val y = size.height / 2f
+            drawLine(Tokens.surface3, Offset(0f, y), Offset(size.width, y), strokeWidth = size.height, cap = StrokeCap.Round)
+            if (buffered > 0f) {
+                drawLine(theme.accent.copy(alpha = 0.35f), Offset(0f, y), Offset(size.width * buffered, y), strokeWidth = size.height, cap = StrokeCap.Round)
+            }
+        }
+        Slider(
+            value = dragging ?: ps.fraction, onValueChange = { dragging = it }, onValueChangeFinished = { dragging?.let(onSeek); dragging = null },
+            modifier = Modifier.fillMaxWidth().height(24.dp).semantics { contentDescription = "Position ${clock(ps.position)} of ${clock(ps.duration)}, buffered ${(buffered * 100).toInt()} percent" },
+            colors = SliderDefaults.colors(thumbColor = theme.accentGradientEnd, activeTrackColor = theme.accent, inactiveTrackColor = Color.Transparent), enabled = ps.duration > 0,
+        )
+    }
 }
 
 @Composable

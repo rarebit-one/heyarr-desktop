@@ -23,6 +23,14 @@ class PlayerEventsTest {
         assertEquals(0.43, s.fraction.toDouble(), 0.01)
     }
 
+    @Test fun demuxerCacheTimeDrivesTheBufferedBand() {
+        var s = PlayerEvents.apply(PlayerState(), """{"event":"property-change","id":2,"name":"duration","data":2000.0}""")
+        assertEquals(0f, s.bufferedFraction) // nothing cached yet
+        s = PlayerEvents.apply(s, """{"event":"property-change","id":7,"name":"demuxer-cache-time","data":500.0}""")
+        assertEquals(500.0, s.bufferedTo)
+        assertEquals(0.25, s.bufferedFraction.toDouble(), 0.001) // 500 / 2000
+    }
+
     @Test fun trackListSplitsSubtitlesAndAudio() {
         val line = """{"event":"property-change","id":8,"name":"track-list","data":[{"id":1,"type":"video","selected":true},{"id":1,"type":"audio","lang":"eng","selected":true},{"id":1,"type":"sub","lang":"en","title":"English","selected":false,"external":true},{"id":2,"type":"sub","lang":"es","selected":false}]}"""
         val s = PlayerEvents.apply(PlayerState(), line)
