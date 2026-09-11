@@ -75,6 +75,14 @@ class EmbeddedPlayer(
     private var socketPath: File? = null
     @Volatile private var closed = false
 
+    /**
+     * The real source runtime, when known (a server transcode stream, whose own
+     * duration grows as it is encoded). When set, it PINS the reported duration
+     * so the scrubber shows the full length instead of what has streamed so far.
+     * Null for a direct file, where mpv's own duration is authoritative.
+     */
+    @Volatile private var knownDuration: Double? = null
+
     val isRunning: Boolean get() = (handle != null || process?.isAlive == true) && channel?.isOpen == true
 
     /** True when mpv runs in its own window rather than inside the app. */
@@ -96,9 +104,10 @@ class EmbeddedPlayer(
      * app's transport still drives it over the same socket. Returns null on success,
      * else a UI-safe reason.
      */
-    fun start(embedded: Boolean, url: String, token: String, title: String): String? {
+    fun start(embedded: Boolean, url: String, token: String, title: String, knownDurationSec: Double? = null): String? {
         close()
         closed = false
+        knownDuration = knownDurationSec?.takeIf { it > 0 }
         poppedOut = !embedded
         lastUrl = url; lastToken = token; lastTitle = title
         val tmp = File(System.getProperty("java.io.tmpdir"))
@@ -120,7 +129,7 @@ class EmbeddedPlayer(
             } catch (e: IOException) { Thread.sleep(80); null }
         }
         channel = ch ?: run { close(); return "mpv started but its control socket never answered." }
-        state = PlayerState(title = title)
+        state = PlayerState(title = title, duration = knownDuration ?: 0.0)
         reader = Thread({ readLoop(ch) }, "mpv-ipc").apply { isDaemon = true; start() }
         for ((i, prop) in OBSERVED.withIndex()) send("observe_property", i + 1, prop)
         if (embedded) send("loadfile", url)
@@ -165,10 +174,11 @@ class EmbeddedPlayer(
     }
 
     /** Replace what is playing (the token was given at start; mpv keeps its header option). */
-    fun load(url: String, title: String) {
+    fun load(url: String, title: String, knownDurationSec: Double? = null) {
         lastUrl = url; lastTitle = title
+        knownDuration = knownDurationSec?.takeIf { it > 0 }
         appliedSubs.clear()   // a new file drops the old file's external subtitles
-        state = state.copy(loaded = false, position = 0.0, duration = 0.0, eof = false, error = null, title = title, subtitles = emptyList(), audio = emptyList())
+        state = state.copy(loaded = false, position = 0.0, duration = knownDuration ?: 0.0, eof = false, error = null, title = title, subtitles = emptyList(), audio = emptyList())
         send("set_property", "force-media-title", title)
         send("loadfile", url)
         send("set_property", "pause", false)
@@ -267,7 +277,12 @@ class EmbeddedPlayer(
                 while (pending.indexOf("\n").also { nl = it } >= 0) {
                     val line = pending.substring(0, nl).trim()
                     pending.delete(0, nl + 1)
-                    if (line.isNotEmpty()) state = PlayerEvents.apply(state, line)
+                    if (line.isNotEmpty()) {
+                        val next = PlayerEvents.apply(state, line)
+                        // Pin the total to the known source runtime: a transcode stream's
+                        // own duration grows as it encodes, which would flicker the scrubber.
+                        state = knownDuration?.let { next.copy(duration = it) } ?: next
+                    }
                 }
             }
         } catch (e: IOException) {

@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import one.rarebit.heyarr.desktop.heyarr.HeyarrApi
+import one.rarebit.heyarr.desktop.heyarr.PlaybackTarget
 import one.rarebit.heyarr.desktop.library.Episode
 import one.rarebit.heyarr.desktop.playback.EmbeddedPlayer
 import one.rarebit.heyarr.desktop.theme.MediaType
@@ -46,7 +47,7 @@ class PlaybackSession {
         current = item
         startError = null
         if (same && player.isRunning) { player.play(); return }
-        if (player.isRunning && !popout) player.load(resolvePlaybackUrl(item), title(item))
+        if (player.isRunning && !popout) resolvePlaybackTarget(item).let { player.load(it.url, title(item), it.durationSeconds) }
         else pendingStart = true
         refreshSubtitles()   // adds now if the queue is already known + player up; else a no-op re-run does it
     }
@@ -97,7 +98,7 @@ class PlaybackSession {
      * 4K/HEVC asset is transcoded down to a smoothly-decodable stream. It runs a
      * network call, so callers on the start path invoke it off the UI thread.
      */
-    var resolvePlaybackUrl: (Route.Player) -> String = { HeyarrApi.blobUrl(baseUrl, it.blobHash) }
+    var resolvePlaybackTarget: (Route.Player) -> PlaybackTarget = { PlaybackTarget(HeyarrApi.blobUrl(baseUrl, it.blobHash)) }
     var accentHex: String = "#00935E"
 
     fun title(item: Route.Player): String = item.title + (item.subtitle?.let { " — $it" } ?: "")

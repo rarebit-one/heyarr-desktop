@@ -52,6 +52,13 @@ import java.net.URLEncoder
  * [McpOutcome.Refused] where the screen must show it, or is thrown where a refusal can
  * only mean failure. Blocking — call on `Dispatchers.IO`.
  */
+/**
+ * Where and how to play an asset, resolved from the playback plan: the URL to
+ * open, plus the source's true runtime in seconds when the plan is a transcode
+ * `stream` (null for a direct blob, where the player's own duration is right).
+ */
+data class PlaybackTarget(val url: String, val durationSeconds: Double? = null)
+
 class HeyarrApi(
     private val http: HttpTransport,
     val baseUrl: String,
@@ -183,8 +190,8 @@ class HeyarrApi(
      * found) it falls back to the direct blob URL, so playback never depends on the
      * plan succeeding. Returns an absolute URL; the plan's own URL is relative.
      */
-    fun playbackUrl(assetId: String, blobHash: String, maxHeight: Int = DEFAULT_MAX_HEIGHT): String {
-        val fallback = blobUrl(baseUrl, blobHash)
+    fun playbackTarget(assetId: String, blobHash: String, maxHeight: Int = DEFAULT_MAX_HEIGHT): PlaybackTarget {
+        val fallback = PlaybackTarget(blobUrl(baseUrl, blobHash))
         if (assetId.isBlank()) return fallback
         val body = JsonWrite.obj(
             mapOf(
@@ -202,7 +209,11 @@ class HeyarrApi(
             if (resp.status != 200) return fallback
             val root = JsonScan.rootObject(resp.body) ?: return fallback
             val url = JsonScan.stringField(root, "url")?.takeIf { it.isNotBlank() } ?: return fallback
-            if (url.startsWith("http")) url else baseUrl.trimEnd('/') + url
+            val abs = if (url.startsWith("http")) url else baseUrl.trimEnd('/') + url
+            // The plan's source carries the true runtime; use it as the scrubber total
+            // for a transcode stream (whose own duration only grows as it encodes).
+            val dur = JsonScan.objectAt(root, "source")?.let { JsonScan.longField(it, "duration_seconds") }?.toDouble()?.takeIf { it > 0 }
+            PlaybackTarget(abs, dur)
         } catch (_: Exception) {
             fallback
         }
