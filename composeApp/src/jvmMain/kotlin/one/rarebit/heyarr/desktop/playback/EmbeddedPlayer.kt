@@ -29,6 +29,11 @@ data class PlayerState(
     val muted: Boolean = false,
     val buffering: Boolean = false,
     val eof: Boolean = false,
+    // The media time up to which bytes are already cached ahead (mpv's
+    // demuxer-cache-time). Drives the "buffered" band on the scrubber. For a
+    // server transcode stream it is how far the encode has been read, so it
+    // trails the pinned total rather than reaching it until the stream ends.
+    val bufferedTo: Double = 0.0,
     val subtitles: List<MpvTrack> = emptyList(),
     val audio: List<MpvTrack> = emptyList(),
     val subtitleId: Int? = null,
@@ -37,6 +42,9 @@ data class PlayerState(
     val title: String? = null,
 ) {
     val fraction: Float get() = if (duration > 0) (position / duration).toFloat().coerceIn(0f, 1f) else 0f
+
+    /** How far the buffer reaches, 0..1 of the total — the lighter band ahead of the playhead. */
+    val bufferedFraction: Float get() = if (duration > 0) (bufferedTo / duration).toFloat().coerceIn(0f, 1f) else 0f
 }
 
 /**
@@ -329,7 +337,7 @@ class EmbeddedPlayer(
         }
 
         /** Properties observed in order; the index+1 is the observer id. */
-        val OBSERVED = listOf("time-pos", "duration", "pause", "volume", "mute", "paused-for-cache", "eof-reached", "track-list", "sid", "aid", "media-title")
+        val OBSERVED = listOf("time-pos", "duration", "pause", "volume", "mute", "paused-for-cache", "demuxer-cache-time", "eof-reached", "track-list", "sid", "aid", "media-title")
     }
 }
 
@@ -357,6 +365,7 @@ object PlayerEvents {
         "volume" -> num(obj)?.let { s.copy(volume = it) } ?: s
         "mute" -> JsonScan.boolField(obj, "data")?.let { s.copy(muted = it) } ?: s
         "paused-for-cache" -> JsonScan.boolField(obj, "data")?.let { s.copy(buffering = it) } ?: s
+        "demuxer-cache-time" -> num(obj)?.let { s.copy(bufferedTo = it) } ?: s
         "eof-reached" -> JsonScan.boolField(obj, "data")?.let { s.copy(eof = it) } ?: s
         "sid" -> s.copy(subtitleId = JsonScan.longField(obj, "data")?.toInt())
         "aid" -> s.copy(audioId = JsonScan.longField(obj, "data")?.toInt())
