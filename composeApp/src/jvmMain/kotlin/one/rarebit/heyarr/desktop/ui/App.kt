@@ -39,6 +39,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import one.rarebit.heyarr.desktop.heyarr.HeyarrApi
 import one.rarebit.heyarr.desktop.heyarr.McpResult
 import one.rarebit.heyarr.desktop.net.HttpTransport
 import one.rarebit.heyarr.desktop.open.BlobDownloader
@@ -153,6 +154,13 @@ fun App(
     // The session player streams with the saved connection; the pop-out OSC takes the media accent.
     LaunchedEffect(session.config, playback.current?.assetId) {
         playback.baseUrl = session.config.baseUrl; playback.token = session.config.bearerToken.trim()
+        // Resolve each play URL through the server's playback plan, so a 4K/HEVC asset
+        // is transcoded down to a smoothly-decodable stream; falls back to the direct
+        // blob when there is no connection.
+        playback.resolvePlaybackUrl = { item ->
+            session.api?.playbackUrl(item.assetId, item.blobHash)
+                ?: HeyarrApi.blobUrl(playback.baseUrl, item.blobHash)
+        }
         playback.accentHex = accentHex(MediaThemes.of(playback.type).accent)
     }
     // Player keys are handled at the window level: a KeyEventDispatcher runs before

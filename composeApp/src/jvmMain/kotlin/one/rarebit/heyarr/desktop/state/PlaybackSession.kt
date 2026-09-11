@@ -46,7 +46,7 @@ class PlaybackSession {
         current = item
         startError = null
         if (same && player.isRunning) { player.play(); return }
-        if (player.isRunning && !popout) player.load(HeyarrApi.blobUrl(baseUrl, item.blobHash), title(item))
+        if (player.isRunning && !popout) player.load(resolvePlaybackUrl(item), title(item))
         else pendingStart = true
         refreshSubtitles()   // adds now if the queue is already known + player up; else a no-op re-run does it
     }
@@ -89,6 +89,15 @@ class PlaybackSession {
     var pendingStart: Boolean by mutableStateOf(false)
     var baseUrl: String = ""
     var token: String = ""
+
+    /**
+     * Resolves the URL to play an item from. The default hands over the direct blob
+     * (the behaviour before device-aware playback, and what tests and screenshots
+     * want); [AppSession] replaces it with one that asks `POST /playback/plan`, so a
+     * 4K/HEVC asset is transcoded down to a smoothly-decodable stream. It runs a
+     * network call, so callers on the start path invoke it off the UI thread.
+     */
+    var resolvePlaybackUrl: (Route.Player) -> String = { HeyarrApi.blobUrl(baseUrl, it.blobHash) }
     var accentHex: String = "#00935E"
 
     fun title(item: Route.Player): String = item.title + (item.subtitle?.let { " — $it" } ?: "")
