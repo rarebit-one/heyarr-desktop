@@ -8,7 +8,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
-import one.rarebit.heyarr.desktop.heyarr.HeyarrApi
 import one.rarebit.heyarr.desktop.state.AppSession
 import org.jetbrains.skia.Rect
 import org.jetbrains.skia.SamplingMode
@@ -50,10 +49,12 @@ fun PlaybackHost(session: AppSession) {
     val item = playback.current ?: return
     LaunchedEffect(item.assetId, playback.pendingStart) {
         if (!playback.pendingStart && playback.player.isRunning) return@LaunchedEffect
-        val url = HeyarrApi.blobUrl(playback.baseUrl, item.blobHash)
         val embedded = !playback.popout
         val err = session.io {
-            if (playback.player.isRunning) playback.player.switchTo(embedded) else playback.player.start(embedded, url, playback.token, playback.title(item))
+            // resolvePlaybackUrl asks the server's playback plan (a network call), so
+            // it runs here inside io, off the UI thread, not before the block.
+            if (playback.player.isRunning) playback.player.switchTo(embedded)
+            else playback.player.start(embedded, playback.resolvePlaybackUrl(item), playback.token, playback.title(item))
         }.getOrNull()
         playback.pendingStart = false
         playback.startError = err

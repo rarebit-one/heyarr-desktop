@@ -260,7 +260,7 @@ fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenSt
                         if (playback.popout) { playback.popout = false; playback.pendingStart = true }
                         else {
                             playback.popout = true
-                            val err = session.io { if (p.isRunning) p.switchTo(embedded = false) else p.start(false, one.rarebit.heyarr.desktop.heyarr.HeyarrApi.blobUrl(playback.baseUrl, item.blobHash), playback.token, playback.title(item)) }.getOrNull()
+                            val err = session.io { if (p.isRunning) p.switchTo(embedded = false) else p.start(false, playback.resolvePlaybackUrl(item), playback.token, playback.title(item)) }.getOrNull()
                             if (err != null) { session.toast(Toast.Kind.ERROR, "Couldn't pop out", err); playback.popout = false; playback.pendingStart = true }
                         }
                     }

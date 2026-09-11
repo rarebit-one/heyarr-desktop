@@ -38,7 +38,9 @@ import one.rarebit.heyarr.desktop.mcp.WantCreatedJson
 import one.rarebit.heyarr.desktop.mcp.WantJson
 import one.rarebit.heyarr.desktop.music.Track
 import one.rarebit.heyarr.desktop.music.TracksJson
+import one.rarebit.heyarr.desktop.mcp.JsonWrite
 import one.rarebit.heyarr.desktop.net.HttpTransport
+import one.rarebit.heyarr.desktop.net.JsonScan
 import one.rarebit.heyarr.desktop.theme.MediaType
 import java.io.IOException
 import java.net.URLEncoder
@@ -167,6 +169,45 @@ class HeyarrApi(
     fun playbackStatus(renderer: String): McpResult<PlaybackStatus?> =
         mcp.call("playback_status", mapOf("renderer" to renderer)).map { PlaybackStatusJson.parse(it) }
 
+    /**
+     * The URL to play [assetId] from, resolved through `POST /api/v1/playback/plan`
+     * (§68, ADR-0069). The server compares what this client declares it can decode
+     * against what the asset actually is and answers `direct` (play the blob as it
+     * is) or `stream` (a `/playback/stream/{token}` URL whose bytes it re-encodes to
+     * fragmented MP4). We declare a deliberately conservative profile — H.264 up to
+     * [maxHeight], stereo AAC in MP4 — so that heavy 4K/HEVC is transcoded down to
+     * something any player decodes smoothly (this machine has no hardware decoder),
+     * while content already within the profile plays direct with no server work.
+     *
+     * Never throws: on any failure (no plan route, malformed answer, the asset not
+     * found) it falls back to the direct blob URL, so playback never depends on the
+     * plan succeeding. Returns an absolute URL; the plan's own URL is relative.
+     */
+    fun playbackUrl(assetId: String, blobHash: String, maxHeight: Int = DEFAULT_MAX_HEIGHT): String {
+        val fallback = blobUrl(baseUrl, blobHash)
+        if (assetId.isBlank()) return fallback
+        val body = JsonWrite.obj(
+            mapOf(
+                "asset_id" to assetId,
+                "client" to mapOf(
+                    "containers" to listOf("mp4"),
+                    "video" to listOf("h264"),
+                    "audio" to listOf("aac"),
+                    "max_height" to maxHeight,
+                ),
+            ),
+        )
+        return try {
+            val resp = http.post("$baseUrl/api/v1/playback/plan", body, "application/json", credential.asHeader())
+            if (resp.status != 200) return fallback
+            val root = JsonScan.rootObject(resp.body) ?: return fallback
+            val url = JsonScan.stringField(root, "url")?.takeIf { it.isNotBlank() } ?: return fallback
+            if (url.startsWith("http")) url else baseUrl.trimEnd('/') + url
+        } catch (_: Exception) {
+            fallback
+        }
+    }
+
     // ── following & peers ────────────────────────────────────────────────────────
 
     /** `list_followed` — every standing subscription and whether its feed is healthy. */
@@ -286,6 +327,13 @@ class HeyarrApi(
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
     companion object {
+        /**
+         * The tallest picture to play without transcoding down. This laptop has no
+         * hardware decoder, so 4K software-decodes into a stutter; 1080p H.264 plays
+         * smoothly, and the server transcodes anything taller to it on the fly.
+         */
+        const val DEFAULT_MAX_HEIGHT = 1080
+
         /** The artwork/asset stream URL — the hash goes in verbatim (see `BlobStream`). */
         fun blobUrl(baseUrl: String, blobHash: String) = baseUrl.trimEnd('/') + "/api/v1/blobs/" + blobHash + "/content"
         fun blobUrlFromPath(baseUrl: String, contentPath: String) = baseUrl.trimEnd('/') + contentPath
