@@ -425,7 +425,7 @@ private fun SeasonsBlock(session: AppSession, detail: WorkDetail, seasons: List<
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (s in all) FilterChip(s.label, s == selected, { state.season = s.number }, count = maxOf(s.episodes.size, ext.count { it.season == s.number }).takeIf { it > 0 })
         }
-        if (state.wantMenu) WantSeasonsPanel(session, detail, all, wants, state)
+        if (state.wantMenu) WantSeasonsPanel(session, detail, all, wants)
         val rows: List<Any> = buildList {
             val byNumber = selected.episodes.associateBy { it.number }
             for (n in 1..known) add(byNumber[n] ?: n)
@@ -441,19 +441,24 @@ private fun SeasonsBlock(session: AppSession, detail: WorkDetail, seasons: List<
 }
 
 /**
- * Wanting more of a series, with the three scopes the node really has: one season
- * (an edition-scope want — heyarr's edition of an episodic work IS its season), the
- * whole series (a work-scope want), or a standing follow through TVDB that projects
- * every episode as it airs and, with a full backfill, the back-catalogue too. Seasons
- * the library has never seen have no edition to point at, so they come via the follow.
+ * Wanting more of a series, at the two scopes that are genuinely distinct (ADR-0089):
+ * one held season (an edition-scope want — heyarr's edition of an episodic work IS its
+ * season), or the whole series. The whole-series want is the unified door: it resolves
+ * the series' metadata id and establishes a full-backfill follow, so wanting the series
+ * IS following it — every aired episode and each new one becomes an item-scoped want.
+ * That is how seasons the library has never seen arrive; there is no separate follow step.
  */
 @Composable
-private fun WantSeasonsPanel(session: AppSession, detail: WorkDetail, seasons: List<Season>, wants: List<DesiredItem>, state: DetailState) {
+private fun WantSeasonsPanel(session: AppSession, detail: WorkDetail, seasons: List<Season>, wants: List<DesiredItem>) {
     val scope = rememberCoroutineScope()
     val profiles = session.profiles
     var profile by remember(profiles) { mutableStateOf(profiles.firstOrNull { it.name == "living-room" }?.name ?: profiles.firstOrNull()?.name ?: "") }
-    val tvdb = state.externalIds.firstOrNull { it.source.equals("tvdb", true) }?.value
-    val wholeSeries = wants.any { it.scope == "work" }
+    // Wanting a series IS following it (ADR-0089): a work-scoped want resolves the
+    // series' metadata id and establishes a full-backfill follow, whose poll then
+    // enumerates every episode as an item-scoped want. So "already following" is
+    // read from those item wants, NOT from a work-scoped want row — that row no
+    // longer lingers beside the follow (ADR-0089 §4/consequences).
+    val following = wants.any { it.scope == "item" }
     Panel("Want more of ${detail.work.title}") {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Profile", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
@@ -482,19 +487,28 @@ private fun WantSeasonsPanel(session: AppSession, detail: WorkDetail, seasons: L
                 )
             }
         }
-        Text("Seasons the library has never seen have nothing to point a want at yet — they arrive through a follow.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
-        Text("Everything", style = MaterialTheme.typography.titleSmall, color = Tokens.textPrimary)
+        Text("Seasons the library hasn't seen yet arrive when you want the whole series below — wanting a series follows it.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+        Text("The whole series", style = MaterialTheme.typography.titleSmall, color = Tokens.textPrimary)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SecondaryButton(if (wholeSeries) "Whole series · wanted" else "Want the whole series", {
+            // One door for a series (ADR-0089): want_content resolves the metadata id and
+            // establishes a full-backfill follow, so this single button both wants and
+            // follows. No separate "Follow on TVDB" step, and no TVDB id needed up front.
+            SecondaryButton(if (following) "Following · every episode wanted" else "Want the whole series", {
                 val a = session.api ?: return@SecondaryButton
-                scope.launch { session.io { a.wantWork(detail.work.id, profile) }.onSuccess { r -> when (r) { is McpResult.Ok -> { session.toast(Toast.Kind.SUCCESS, "Wanted the whole series"); session.refreshIndex() }; is McpResult.Refused -> session.refused(r) } } }
-            }, icon = Icons.Rounded.Add, compact = true, enabled = !wholeSeries && profile.isNotBlank())
-            if (tvdb != null) SecondaryButton("Follow on TVDB (full back-catalogue)", {
-                val a = session.api ?: return@SecondaryButton
-                scope.launch { session.io { a.follow(null, tvdb, null, profile, backfill = "full", reason = "followed from the desktop") }.onSuccess { r -> when (r) { is McpResult.Ok -> session.toast(Toast.Kind.SUCCESS, "Following ${detail.work.title}", "Every episode, past and future, becomes a want."); is McpResult.Refused -> session.refused(r) } } }
-            }, icon = Icons.Rounded.Search, compact = true, enabled = profile.isNotBlank())
+                scope.launch {
+                    session.io { a.wantWork(detail.work.id, profile) }.onSuccess { r ->
+                        when (r) {
+                            is McpResult.Ok -> {
+                                session.toast(Toast.Kind.SUCCESS, "Wanting ${detail.work.title}", "Wanting a series follows it — every episode, past and future, becomes a want.")
+                                session.refreshIndex()
+                            }
+                            is McpResult.Refused -> session.refused(r)
+                        }
+                    }
+                }
+            }, icon = Icons.Rounded.Add, compact = true, enabled = !following && profile.isNotBlank())
         }
-        if (tvdb == null) Text("No TVDB id is recorded for this work, so a follow needs the TVDB URL — Settings → Followed sources.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
+        Text("Wanting the whole series follows it: heyarr resolves its metadata id automatically (no TVDB URL needed) and backfills every aired episode plus each new one. To follow a source that has no work here, use Settings → Followed sources.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
     }
 }
 
