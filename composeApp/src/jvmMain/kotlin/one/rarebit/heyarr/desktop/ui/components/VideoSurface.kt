@@ -51,10 +51,10 @@ fun PlaybackHost(session: AppSession) {
         if (!playback.pendingStart && playback.player.isRunning) return@LaunchedEffect
         val embedded = !playback.popout
         val err = session.io {
-            // resolvePlaybackUrl asks the server's playback plan (a network call), so
+            // resolvePlaybackTarget asks the server's playback plan (a network call), so
             // it runs here inside io, off the UI thread, not before the block.
             if (playback.player.isRunning) playback.player.switchTo(embedded)
-            else playback.player.start(embedded, playback.resolvePlaybackUrl(item), playback.token, playback.title(item))
+            else playback.resolvePlaybackTarget(item).let { t -> playback.player.start(embedded, t.url, playback.token, playback.title(item), t.durationSeconds) }
         }.getOrNull()
         playback.pendingStart = false
         playback.startError = err

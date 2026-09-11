@@ -6,10 +6,11 @@ import one.rarebit.heyarr.desktop.net.HttpResponse
 import one.rarebit.heyarr.desktop.net.HttpTransport
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * playbackUrl asks POST /api/v1/playback/plan and plays what it is told: the
+ * playbackTarget asks POST /api/v1/playback/plan and plays what it is told: the
  * server transcodes 4K/HEVC down when the client declares it cannot decode it,
  * and hands the blob over directly otherwise. The client must send a
  * conservative profile, turn the plan's relative URL into an absolute one, and
@@ -34,7 +35,7 @@ class PlaybackPlanTest {
         var sentBody: String? = null
         val t = transport(200, """{"mode":"stream","url":"/api/v1/playback/stream/tok123","mime":"video/mp4"}""") { sentBody = it }
 
-        val url = api(t).playbackUrl("asset-1", "blake3:abc")
+        val url = api(t).playbackTarget("asset-1", "blake3:abc").url
 
         assertEquals("$base/api/v1/playback/stream/tok123", url)
         // A conservative, transcode-forcing profile: H.264 up to 1080p, this asset.
@@ -44,28 +45,40 @@ class PlaybackPlanTest {
     }
 
     @Test
+    fun aStreamPlanCarriesTheSourceDurationForTheScrubber() {
+        // The source's true runtime (whole seconds) rides the plan so the client can
+        // pin the scrubber total; the transcode stream cannot report its own length.
+        val t = transport(200, """{"mode":"stream","url":"/api/v1/playback/stream/tok","source":{"duration_seconds":2703.4}}""")
+        val target = api(t).playbackTarget("asset-1", "blake3:abc")
+        assertEquals("$base/api/v1/playback/stream/tok", target.url)
+        assertEquals(2703.0, target.durationSeconds)
+    }
+
+    @Test
     fun aDirectPlanIsPlayedAsThePlansUrl() {
         val t = transport(200, """{"mode":"direct","url":"/api/v1/blobs/blake3:abc/content"}""")
-        assertEquals("$base/api/v1/blobs/blake3:abc/content", api(t).playbackUrl("asset-1", "blake3:abc"))
+        val target = api(t).playbackTarget("asset-1", "blake3:abc")
+        assertEquals("$base/api/v1/blobs/blake3:abc/content", target.url)
+        assertNull(target.durationSeconds, "a direct blob has no plan-supplied duration")
     }
 
     @Test
     fun anAbsolutePlanUrlIsUsedVerbatim() {
         val t = transport(200, """{"mode":"stream","url":"https://peer.example/api/v1/playback/stream/tok"}""")
-        assertEquals("https://peer.example/api/v1/playback/stream/tok", api(t).playbackUrl("asset-1", "blake3:abc"))
+        assertEquals("https://peer.example/api/v1/playback/stream/tok", api(t).playbackTarget("asset-1", "blake3:abc").url)
     }
 
     @Test
     fun aFailedPlanFallsBackToTheDirectBlob() {
         val t = transport(500, "boom")
-        assertEquals(HeyarrApi.blobUrl(base, "blake3:abc"), api(t).playbackUrl("asset-1", "blake3:abc"))
+        assertEquals(HeyarrApi.blobUrl(base, "blake3:abc"), api(t).playbackTarget("asset-1", "blake3:abc").url)
     }
 
     @Test
     fun aBlankAssetIdFallsBackWithoutCallingThePlan() {
         var called = false
         val t = transport(200, "{}") { called = true }
-        assertEquals(HeyarrApi.blobUrl(base, "blake3:abc"), api(t).playbackUrl("", "blake3:abc"))
+        assertEquals(HeyarrApi.blobUrl(base, "blake3:abc"), api(t).playbackTarget("", "blake3:abc").url)
         assertTrue(!called, "no plan call when there is no asset id")
     }
 }
