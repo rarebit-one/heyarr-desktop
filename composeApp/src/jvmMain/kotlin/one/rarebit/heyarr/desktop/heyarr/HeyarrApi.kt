@@ -156,11 +156,21 @@ class HeyarrApi(
      * which names the UPnP action and error code the device gave. That text is what
      * the person needs, so it comes back verbatim.
      */
-    fun playHere(assetId: String, renderer: String, udn: String? = null): McpResult<Unit> {
-        val viaTool = mcp.call("play_here", mapOf("asset_id" to assetId, "renderer" to renderer)).map { }
+    fun playHere(assetId: String, renderer: String, udn: String? = null, forceDirect: Boolean = false): McpResult<Unit> {
+        // force_direct is the "cast anyway" override: send the bytes even when the renderer's
+        // declared codecs would make the plan non-DIRECT (a TV that decodes more than it
+        // advertises). Only added when set, so a normal cast keeps the honest refusal.
+        val toolArgs = buildMap<String, Any?> {
+            put("asset_id", assetId); put("renderer", renderer)
+            if (forceDirect) put("force_direct", true)
+        }
+        val viaTool = mcp.call("play_here", toolArgs).map { }
         if (viaTool !is McpResult.Refused || udn == null || !viaTool.message.contains("tool failed")) return viaTool
+        val body = one.rarebit.heyarr.desktop.mcp.JsonWrite.obj(buildMap<String, Any?> {
+            put("asset_id", assetId); if (forceDirect) put("force_direct", true)
+        })
         val resp = try {
-            http.post("$baseUrl/api/v1/renderers/${enc(udn)}/play", one.rarebit.heyarr.desktop.mcp.JsonWrite.obj(mapOf("asset_id" to assetId)), "application/json", credential.asHeader())
+            http.post("$baseUrl/api/v1/renderers/${enc(udn)}/play", body, "application/json", credential.asHeader())
         } catch (e: IOException) { throw McpTransportException("heyarr is unreachable: ${e.message}", e) }
         return when (resp.status) {
             200, 201, 202 -> McpResult.Ok(Unit)

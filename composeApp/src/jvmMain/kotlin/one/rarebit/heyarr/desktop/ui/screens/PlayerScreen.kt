@@ -421,14 +421,19 @@ private fun CastRow(session: AppSession, state: PlayerScreenState, item: Route.P
                     state.castOpen = false
                     // On the SESSION scope, not this row's: closing the picker (above) removes
                     // CastRow from composition, which would cancel a row-scoped coroutine — and
-                    // its toast — before the cast finished. That was the "nothing happened" bug.
-                    // session.io already toasts transport failures; a rule refusal (e.g. the device
-                    // needs a transcode heyarr cannot serve yet) is surfaced by session.refused.
-                    session.launch {
-                        session.playback.player.pause()
-                        session.io { a.playHere(item.assetId, x.name, x.udn) }
-                            .onSuccess { res -> when (res) { is McpResult.Ok -> session.toast(Toast.Kind.SUCCESS, "Playing on ${x.name}", item.title); is McpResult.Refused -> session.refused(res) } }
+                    // its toast — before the cast finished. A codec refusal offers "Cast anyway"
+                    // (force_direct); forcing again is shown as a plain refusal, so no loop.
+                    fun cast(force: Boolean) {
+                        session.launch {
+                            session.playback.player.pause()
+                            session.io { a.playHere(item.assetId, x.name, x.udn, forceDirect = force) }
+                                .onSuccess { res -> when (res) {
+                                    is McpResult.Ok -> session.toast(Toast.Kind.SUCCESS, "Playing on ${x.name}", item.title)
+                                    is McpResult.Refused -> if (force) session.refused(res) else session.castRefused(res, x.name) { cast(true) }
+                                } }
+                        }
                     }
+                    cast(false)
                 }, icon = Icons.Rounded.Cast)
             }
         }

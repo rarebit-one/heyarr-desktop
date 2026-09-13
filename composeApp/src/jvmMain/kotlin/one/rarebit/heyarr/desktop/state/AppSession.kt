@@ -44,9 +44,15 @@ data class Toast(
     val title: String,
     val detail: String? = null,
     val tool: String? = null,
+    // An optional single action rendered as a button on the card — e.g. "Cast anyway"
+    // on a codec refusal. Dismissing or the timeout removes the toast either way.
+    val action: ToastAction? = null,
 ) {
     enum class Kind { INFO, SUCCESS, ERROR, REFUSED }
 }
+
+/** A button on a toast: a short label and what it does. */
+data class ToastAction(val label: String, val onClick: () -> Unit)
 
 /**
  * App-wide state every screen shares: the saved connection, the [HeyarrApi] built from
@@ -235,8 +241,25 @@ class AppSession(
 
     fun refused(r: McpResult.Refused) = toast(Toast.Kind.REFUSED, "Refused by ${r.tool}", r.message, r.tool)
 
-    fun toast(kind: Toast.Kind, title: String, detail: String? = null, tool: String? = null) {
-        val t = Toast(++toastSeq, kind, title, detail, tool)
+    /**
+     * A cast refusal, with an escape hatch. A codec/transcode refusal — the renderer
+     * declares fewer codecs than it actually decodes (a TV that under-declares DD+ over
+     * DLNA) — gets a "Cast anyway" action that retries with force_direct; [retry] performs
+     * that forced cast. Any other refusal (a screen that is off, an unreachable renderer)
+     * is shown as-is, since forcing would not help.
+     */
+    fun castRefused(r: McpResult.Refused, deviceName: String, retry: () -> Unit) {
+        val codec = r.message.contains("transcode") || r.message.contains("does not declare") || r.message.contains("cannot serve")
+        if (codec) {
+            toast(Toast.Kind.REFUSED, "$deviceName can't play this as it is", r.message, r.tool,
+                action = ToastAction("Cast anyway") { retry() })
+        } else {
+            refused(r)
+        }
+    }
+
+    fun toast(kind: Toast.Kind, title: String, detail: String? = null, tool: String? = null, action: ToastAction? = null) {
+        val t = Toast(++toastSeq, kind, title, detail, tool, action)
         toasts.add(t)
         scope.launch { delay(if (kind == Toast.Kind.REFUSED || kind == Toast.Kind.ERROR) 9_000 else 4_500); toasts.remove(t) }
     }
