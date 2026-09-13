@@ -370,6 +370,13 @@ fun ToastCard(toast: Toast, onDismiss: () -> Unit, modifier: Modifier = Modifier
             Text(toast.title, style = MaterialTheme.typography.titleSmall, color = Tokens.textPrimary)
             if (toast.detail != null) Text(toast.detail, style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
             if (toast.tool != null) Text("via ${toast.tool}", style = MaterialTheme.typography.labelSmall, color = Tokens.textDisabled)
+            if (toast.action != null) Text(
+                toast.action.label,
+                style = MaterialTheme.typography.labelLarge,
+                color = tone,
+                modifier = Modifier.padding(top = 4.dp).clickable { toast.action.onClick(); onDismiss() }
+                    .semantics { this.role = Role.Button },
+            )
         }
         IconButtonRound(Icons.Rounded.Close, "Dismiss", onDismiss, size = 26.dp)
     }
