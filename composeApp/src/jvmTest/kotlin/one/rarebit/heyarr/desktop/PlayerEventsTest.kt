@@ -31,6 +31,38 @@ class PlayerEventsTest {
         assertEquals(0.25, s.bufferedFraction.toDouble(), 0.001) // 500 / 2000
     }
 
+    @Test fun warmUpEndsAtTheFirstFrameAndDoesNotReturn() {
+        var s = PlayerState()
+        assertTrue(s.warmingUp)                       // nothing on screen yet
+        s = PlayerEvents.apply(s, """{"event":"file-loaded"}""")
+        assertTrue(s.warmingUp); assertFalse(s.hasStarted)  // loaded, but still no frame
+        s = PlayerEvents.apply(s, """{"event":"property-change","id":9,"name":"core-idle","data":false}""")
+        assertTrue(s.hasStarted); assertFalse(s.warmingUp)  // first frame is up
+        // A later pause (core-idle true again) is a pause, not warm-up.
+        s = PlayerEvents.apply(s, """{"event":"property-change","id":9,"name":"core-idle","data":true}""")
+        assertTrue(s.hasStarted); assertFalse(s.warmingUp)
+    }
+
+    @Test fun timePastTheFirstSecondAlsoCountsAsStarted() {
+        val s = PlayerEvents.apply(PlayerState(), """{"event":"property-change","id":1,"name":"time-pos","data":2.0}""")
+        assertTrue(s.hasStarted); assertFalse(s.warmingUp)
+    }
+
+    @Test fun eofAndErrorAreNotWarmUp() {
+        assertFalse(PlayerState(eof = true).warmingUp)
+        assertFalse(PlayerState(error = "boom").warmingUp)
+    }
+
+    @Test fun aStallAfterStartIsNotWarmUpButShowsLoading() {
+        var s = PlayerEvents.apply(PlayerState(), """{"event":"property-change","id":9,"name":"core-idle","data":false}""")
+        s = PlayerEvents.apply(s, """{"event":"property-change","id":3,"name":"pause","data":false}""")
+        assertFalse(s.stalled); assertFalse(s.warmingUp)                 // playing
+        s = PlayerEvents.apply(s, """{"event":"property-change","id":9,"name":"core-idle","data":true}""")
+        assertTrue(s.stalled); assertFalse(s.warmingUp)                  // stuck mid-stream
+        val paused = PlayerEvents.apply(s, """{"event":"property-change","id":3,"name":"pause","data":true}""")
+        assertFalse(paused.stalled)                                       // a deliberate pause is not a stall
+    }
+
     @Test fun trackListSplitsSubtitlesAndAudio() {
         val line = """{"event":"property-change","id":8,"name":"track-list","data":[{"id":1,"type":"video","selected":true},{"id":1,"type":"audio","lang":"eng","selected":true},{"id":1,"type":"sub","lang":"en","title":"English","selected":false,"external":true},{"id":2,"type":"sub","lang":"es","selected":false}]}"""
         val s = PlayerEvents.apply(PlayerState(), line)

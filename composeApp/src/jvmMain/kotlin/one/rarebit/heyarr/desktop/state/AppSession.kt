@@ -242,4 +242,12 @@ class AppSession(
     }
 
     fun dismiss(toast: Toast) { toasts.remove(toast) }
+
+    /**
+     * Launch [block] on the session's own scope, so it outlives the screen or menu that
+     * started it. A cast fired from a picker that closes on click must NOT be cancelled
+     * when that picker leaves composition — a screen-local rememberCoroutineScope would
+     * cancel it (and its toast) mid-flight, which is exactly the "nothing happened" bug.
+     */
+    fun launch(block: suspend CoroutineScope.() -> Unit) = scope.launch(block = block)
 }

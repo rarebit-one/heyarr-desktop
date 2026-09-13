@@ -29,6 +29,16 @@ data class PlayerState(
     val muted: Boolean = false,
     val buffering: Boolean = false,
     val eof: Boolean = false,
+    // mpv's core-idle: true whenever no frame is being shown — during the initial
+    // warm-up, a mid-stream cache stall, a seek, a pause or EOF. Paired with
+    // [hasStarted] to tell the FIRST warm-up (nothing on screen yet) apart from a
+    // later pause, which core-idle alone cannot.
+    val coreIdle: Boolean = true,
+    // Sticky: flips true the instant the first frame plays (core-idle goes false, or
+    // the position passes the first second) and never flips back. Before it the
+    // picture is still warming up and the scrubber is not yet live; after it a pause
+    // is just a pause. A fresh start/load resets it.
+    val hasStarted: Boolean = false,
     // The media time up to which bytes are already cached ahead (mpv's
     // demuxer-cache-time). Drives the "buffered" band on the scrubber. For a
     // server transcode stream it is how far the encode has been read, so it
@@ -45,6 +55,24 @@ data class PlayerState(
 
     /** How far the buffer reaches, 0..1 of the total — the lighter band ahead of the playhead. */
     val bufferedFraction: Float get() = if (duration > 0) (bufferedTo / duration).toFloat().coerceIn(0f, 1f) else 0f
+
+    /**
+     * Warming up: a file is loading or has loaded but no frame has played yet — the
+     * "playing but nothing on screen" gap at the very start, which for a server stream
+     * can run tens of seconds while the encode and the cache fill. Distinct from
+     * [buffering] (a cache stall AFTER playback has begun), and false once [hasStarted],
+     * so a later pause is never mistaken for warm-up. The picture shows a starting state
+     * and the scrubber is not yet seekable while this holds.
+     */
+    val warmingUp: Boolean get() = error == null && !eof && !hasStarted
+
+    /**
+     * Stalled: playback has started and is not paused, but no frame is being shown right now —
+     * a mid-stream cache underrun (the "stuck at the first second" case once it has nominally
+     * begun). The picture would otherwise sit on a frozen last frame; treated like warm-up so
+     * the loading cover shows instead. A deliberate pause (paused) is not a stall.
+     */
+    val stalled: Boolean get() = error == null && !eof && hasStarted && !paused && coreIdle
 }
 
 /**
@@ -150,11 +178,18 @@ class EmbeddedPlayer(
         val h = lib.mpv_create() ?: return "libmpv could not create a player"
         val options = listOf(
             "vo" to "libmpv", "input-ipc-server" to sock.absolutePath, "idle" to "yes", "keep-open" to "yes", "terminal" to "no",
-            // `auto-copy`, not `no`: 4K HEVC software-decodes far too slowly here and stutters. auto-copy
-            // decodes on the GPU (the expensive part) then copies frames back to system memory, which is what
-            // this frame-readback renderer needs — plain `auto` would hand back GPU-only frames it cannot read.
-            // It falls back to software when no hardware decoder is available, so it is safe on every machine.
-            "msg-level" to "all=error", "osc" to "no", "osd-level" to "0", "input-default-bindings" to "no", "hwdec" to "auto-copy",
+            // Hardware decode into system memory — the frame-readback renderer needs the frames
+            // back in RAM (plain `auto` hands back GPU-only frames it cannot read), and 4K HEVC is
+            // far too slow to software-decode here. [EMBEDDED_HWDEC] is `vulkan-copy` on aarch64
+            // Linux (Apple Silicon / Asahi), where the VA-API path crashes libmpv, and `auto-copy`
+            // elsewhere; mpv falls back to software if the method is unavailable, so it is always safe.
+            "msg-level" to "all=error", "osc" to "no", "osd-level" to "0", "input-default-bindings" to "no", "hwdec" to EMBEDDED_HWDEC,
+            // HDR sources (4K especially) tone-mapped toward the SDR, 8-bit surface this
+            // software renderer presents. Without it mpv hands back BT.2020/PQ pixels the UI
+            // shows as if they were sRGB — the washed-out, low-contrast look on 4K HDR. The
+            // software render path cannot tone-map as fully as the GPU pop-out (default vo),
+            // which stays the reference for HDR; this is the best the in-app surface offers.
+            "tone-mapping" to "bt.2390",
             "http-header-fields" to "Authorization: Bearer $token", "force-media-title" to title,
         ) + listOfNotNull(start?.let { "start" to it.toString() })
         for ((k, v) in options) lib.mpv_set_option_string(h, k, v)
@@ -171,7 +206,14 @@ class EmbeddedPlayer(
             add(command)
             add("--input-ipc-server=${sock.absolutePath}")
             addAll(listOf("--idle=yes", "--force-window=yes", "--keep-open=yes", "--no-terminal", "--msg-level=all=error"))
-            addAll(listOf("--osc=no", "--osd-level=1", "--osd-bar=no", "--input-default-bindings=yes", "--input-vo-keyboard=yes", "--geometry=60%", "--input-conf=${inputConf().absolutePath}"))
+            // Same decoder story as the embedded path: on aarch64 Linux force Vulkan so the
+            // pop-out is not a black screen from the crashing VA-API/v4l2 route. The GPU vo can
+            // take Vulkan frames directly (no copy). Elsewhere leave mpv's own default.
+            POPOUT_HWDEC?.let { add("--hwdec=$it") }
+            // osc=yes: the pop-out is its OWN window, so give it mpv's on-screen controller —
+            // a seek bar and buttons on mouse-over. (The embedded path has no window and is
+            // driven by the app's transport; this only affects the pop-out.)
+            addAll(listOf("--osc=yes", "--osd-level=1", "--osd-bar=yes", "--input-default-bindings=yes", "--input-vo-keyboard=yes", "--geometry=60%", "--input-conf=${inputConf().absolutePath}"))
             start?.let { add("--start=$it") }
             add("--http-header-fields=Authorization: Bearer $token")
             add("--title=$title")
@@ -186,7 +228,7 @@ class EmbeddedPlayer(
         lastUrl = url; lastTitle = title
         knownDuration = knownDurationSec?.takeIf { it > 0 }
         appliedSubs.clear()   // a new file drops the old file's external subtitles
-        state = state.copy(loaded = false, position = 0.0, duration = knownDuration ?: 0.0, eof = false, error = null, title = title, subtitles = emptyList(), audio = emptyList())
+        state = state.copy(loaded = false, position = 0.0, duration = knownDuration ?: 0.0, eof = false, error = null, hasStarted = false, coreIdle = true, title = title, subtitles = emptyList(), audio = emptyList())
         send("set_property", "force-media-title", title)
         send("loadfile", url)
         send("set_property", "pause", false)
@@ -328,6 +370,21 @@ class EmbeddedPlayer(
     }
 
     companion object {
+        // aarch64 Linux is Apple Silicon / Asahi (the app's other target beside x86). There the
+        // VA-API decode path runs through libva-v4l2request, which fails to decode and crashes
+        // libmpv outright ("pure virtual method called") — it turned a pop-out into a black screen
+        // and a pop-back-in into a hard crash. Vulkan video decode works there (verified for H.264
+        // and 4K HEVC-10), so prefer it. `-copy` on the embedded path hands frames back to system
+        // memory for the software renderer; the pop-out's GPU vo takes Vulkan frames directly.
+        private val asahiLike = System.getProperty("os.name").orEmpty().startsWith("Linux") &&
+            System.getProperty("os.arch") in setOf("aarch64", "arm64")
+
+        /** Embedded (in-process, frame-readback) decode path. */
+        val EMBEDDED_HWDEC = if (asahiLike) "vulkan-copy" else "auto-copy"
+
+        /** Pop-out (external mpv, GPU vo) decode path; null leaves mpv's own default. */
+        val POPOUT_HWDEC: String? = if (asahiLike) "vulkan" else null
+
         /** Sockets left by app processes that are gone (a kill, a crash); ours are named by pid. */
         internal fun sweepStaleSockets(dir: File) {
             dir.listFiles { f -> f.name.startsWith("heyarr-mpv-") && f.name.endsWith(".sock") }?.forEach { f ->
@@ -337,7 +394,7 @@ class EmbeddedPlayer(
         }
 
         /** Properties observed in order; the index+1 is the observer id. */
-        val OBSERVED = listOf("time-pos", "duration", "pause", "volume", "mute", "paused-for-cache", "demuxer-cache-time", "eof-reached", "track-list", "sid", "aid", "media-title")
+        val OBSERVED = listOf("time-pos", "duration", "pause", "volume", "mute", "paused-for-cache", "demuxer-cache-time", "eof-reached", "core-idle", "track-list", "sid", "aid", "media-title")
     }
 }
 
@@ -359,7 +416,9 @@ object PlayerEvents {
     }
 
     private fun onProperty(s: PlayerState, name: String, obj: String): PlayerState = when (name) {
-        "time-pos" -> num(obj)?.let { s.copy(position = it) } ?: s
+        // hasStarted flips on the first frame; time crossing the first second is the
+        // fallback for a stream mpv plays without ever reporting core-idle=false.
+        "time-pos" -> num(obj)?.let { s.copy(position = it, hasStarted = s.hasStarted || it > 0.5) } ?: s
         "duration" -> num(obj)?.let { s.copy(duration = it) } ?: s
         "pause" -> JsonScan.boolField(obj, "data")?.let { s.copy(paused = it) } ?: s
         "volume" -> num(obj)?.let { s.copy(volume = it) } ?: s
@@ -367,6 +426,8 @@ object PlayerEvents {
         "paused-for-cache" -> JsonScan.boolField(obj, "data")?.let { s.copy(buffering = it) } ?: s
         "demuxer-cache-time" -> num(obj)?.let { s.copy(bufferedTo = it) } ?: s
         "eof-reached" -> JsonScan.boolField(obj, "data")?.let { s.copy(eof = it) } ?: s
+        // core-idle false means a frame is being shown: the first one ends warm-up for good.
+        "core-idle" -> JsonScan.boolField(obj, "data")?.let { idle -> s.copy(coreIdle = idle, hasStarted = s.hasStarted || !idle) } ?: s
         "sid" -> s.copy(subtitleId = JsonScan.longField(obj, "data")?.toInt())
         "aid" -> s.copy(audioId = JsonScan.longField(obj, "data")?.toInt())
         "media-title" -> JsonScan.stringField(obj, "data")?.let { s.copy(title = it) } ?: s

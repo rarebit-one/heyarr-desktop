@@ -46,9 +46,11 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -196,7 +198,14 @@ fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenSt
                         Text("Playing in a separate mpv window", style = MaterialTheme.typography.titleMedium, color = Tokens.textPrimary)
                         Text("The controls below still drive it; closing that window brings playback back in here.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
                     }
-                    else -> VideoSurface(p, Modifier.fillMaxSize())
+                    else -> {
+                        VideoSurface(p, Modifier.fillMaxSize())
+                        // Loading cover: opaque over the picture until the first frame plays
+                        // (warm-up) AND during a mid-stream stall (stuck once it has begun). It is
+                        // honest about "playing but nothing on screen" and hides any pre-roll or
+                        // stale frame rather than freezing on it.
+                        if ((ps.warmingUp || ps.stalled) && playback.startError == null) StartingOverlay(if (ps.warmingUp) "Starting…" else "Buffering…")
+                    }
                 }
                 if (playback.startError != null) Box(Modifier.fillMaxSize().background(Tokens.bgBase.copy(alpha = 0.85f)), contentAlignment = Alignment.Center) { Notice("mpv could not start: ${playback.startError}", tone = Tokens.danger, modifier = Modifier.padding(32.dp)) }
             }
@@ -216,7 +225,10 @@ fun PlayerScreen(session: AppSession, route: Route.Player, state: PlayerScreenSt
                     IconButtonRound(Icons.Rounded.Stop, "Stop and close the player", { playback.stop(); onBack() }, size = 36.dp)
                     Spacer(Modifier.width(4.dp))
                     Text("${clock(ps.position)} / ${clock(ps.duration)}", style = MaterialTheme.typography.labelLarge, color = Tokens.textPrimary)
-                    if (ps.buffering) Text("buffering…", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
+                    // Warm-up and mid-stream stalls read differently: "starting…" is the first
+                    // fill (nothing shown yet); "buffering…" is a cache stall once it is going.
+                    if (ps.warmingUp) Text("starting…", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
+                    else if (ps.buffering || ps.stalled) Text("buffering…", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
                     if (ps.eof) Text("finished", style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
                     Spacer(Modifier.weight(1f))
                     TrackMenu(ps, p)
@@ -352,24 +364,46 @@ private fun SeekBar(ps: PlayerState, onSeek: (Float) -> Unit) {
     val theme = LocalMediaTheme.current
     var dragging by remember { mutableStateOf<Float?>(null) }
     val buffered = ps.bufferedFraction
-    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        // Behind the Slider: the inactive rail, and over it a lighter band as far
-        // as the stream has cached ahead. Inset by the thumb radius so it lines up
-        // with the track the Slider paints the played portion onto. The Slider's
-        // own inactive track is transparent (so this shows through) but it still
-        // owns the active track and the thumb, so dragging stays pixel-accurate.
-        Canvas(Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(4.dp)) {
-            val y = size.height / 2f
-            drawLine(Tokens.surface3, Offset(0f, y), Offset(size.width, y), strokeWidth = size.height, cap = StrokeCap.Round)
-            if (buffered > 0f) {
-                drawLine(theme.accent.copy(alpha = 0.35f), Offset(0f, y), Offset(size.width * buffered, y), strokeWidth = size.height, cap = StrokeCap.Round)
+    // Fixed height so the row does not jump when the warm-up bar swaps for the Slider.
+    Box(Modifier.fillMaxWidth().height(24.dp), contentAlignment = Alignment.Center) {
+        if (ps.warmingUp) {
+            // Not seekable yet: an indeterminate line, so the scrubber reads as "loading"
+            // rather than a live playhead frozen at zero that ignores every drag.
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(4.dp).clip(RoundedCornerShape(2.dp))
+                    .semantics { contentDescription = "Starting…" },
+                color = theme.accent, trackColor = Tokens.surface3,
+            )
+        } else {
+            // Behind the Slider: the inactive rail, and over it a lighter band as far
+            // as the stream has cached ahead. Inset by the thumb radius so it lines up
+            // with the track the Slider paints the played portion onto. The Slider's
+            // own inactive track is transparent (so this shows through) but it still
+            // owns the active track and the thumb, so dragging stays pixel-accurate.
+            Canvas(Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(4.dp)) {
+                val y = size.height / 2f
+                drawLine(Tokens.surface3, Offset(0f, y), Offset(size.width, y), strokeWidth = size.height, cap = StrokeCap.Round)
+                if (buffered > 0f) {
+                    drawLine(theme.accent.copy(alpha = 0.35f), Offset(0f, y), Offset(size.width * buffered, y), strokeWidth = size.height, cap = StrokeCap.Round)
+                }
             }
+            Slider(
+                value = dragging ?: ps.fraction, onValueChange = { dragging = it }, onValueChangeFinished = { dragging?.let(onSeek); dragging = null },
+                modifier = Modifier.fillMaxWidth().height(24.dp).semantics { contentDescription = "Position ${clock(ps.position)} of ${clock(ps.duration)}, buffered ${(buffered * 100).toInt()} percent" },
+                colors = SliderDefaults.colors(thumbColor = theme.accentGradientEnd, activeTrackColor = theme.accent, inactiveTrackColor = Color.Transparent), enabled = ps.duration > 0 && ps.hasStarted,
+            )
         }
-        Slider(
-            value = dragging ?: ps.fraction, onValueChange = { dragging = it }, onValueChangeFinished = { dragging?.let(onSeek); dragging = null },
-            modifier = Modifier.fillMaxWidth().height(24.dp).semantics { contentDescription = "Position ${clock(ps.position)} of ${clock(ps.duration)}, buffered ${(buffered * 100).toInt()} percent" },
-            colors = SliderDefaults.colors(thumbColor = theme.accentGradientEnd, activeTrackColor = theme.accent, inactiveTrackColor = Color.Transparent), enabled = ps.duration > 0,
-        )
+    }
+}
+
+/** The picture's warm-up cover: an opaque starting state until the first frame plays. */
+@Composable
+private fun StartingOverlay(label: String) {
+    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            CircularProgressIndicator(color = LocalMediaTheme.current.accent, strokeWidth = 3.dp, modifier = Modifier.size(40.dp))
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = Tokens.textMuted)
+        }
     }
 }
 
@@ -385,9 +419,15 @@ private fun CastRow(session: AppSession, state: PlayerScreenState, item: Route.P
                 for (x in r) FilterChip(x.name, false, {
                     val a = session.api ?: return@FilterChip
                     state.castOpen = false
-                    scope.launch {
+                    // On the SESSION scope, not this row's: closing the picker (above) removes
+                    // CastRow from composition, which would cancel a row-scoped coroutine — and
+                    // its toast — before the cast finished. That was the "nothing happened" bug.
+                    // session.io already toasts transport failures; a rule refusal (e.g. the device
+                    // needs a transcode heyarr cannot serve yet) is surfaced by session.refused.
+                    session.launch {
                         session.playback.player.pause()
-                        session.io { a.playHere(item.assetId, x.name, x.udn) }.onSuccess { res -> when (res) { is McpResult.Ok -> session.toast(Toast.Kind.SUCCESS, "Playing on ${x.name}", item.title); is McpResult.Refused -> session.refused(res) } }
+                        session.io { a.playHere(item.assetId, x.name, x.udn) }
+                            .onSuccess { res -> when (res) { is McpResult.Ok -> session.toast(Toast.Kind.SUCCESS, "Playing on ${x.name}", item.title); is McpResult.Refused -> session.refused(res) } }
                     }
                 }, icon = Icons.Rounded.Cast)
             }
