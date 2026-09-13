@@ -368,7 +368,11 @@ private fun CastPicker(session: AppSession, state: DetailState) {
     fun playOn(renderer: Renderer) {
         val api = session.api ?: return
         state.castAssetId = null
-        scope.launch {
+        // Session scope, not this picker's: clearing castAssetId (above) removes the picker
+        // from composition, and a picker-scoped coroutine would be cancelled with it before the
+        // cast — and its toast — completed. session.io toasts transport failures; a refusal is
+        // surfaced by session.refused.
+        session.launch {
             state.busy = "cast"
             session.io { api.playHere(assetId, renderer.name, renderer.udn) }.onSuccess { r -> when (r) { is McpResult.Ok -> session.toast(Toast.Kind.SUCCESS, "Playing on ${renderer.name}"); is McpResult.Refused -> session.refused(r) } }
             state.busy = null

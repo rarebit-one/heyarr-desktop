@@ -129,6 +129,10 @@ internal class MpvRenderer(private val lib: MpvLib, private val handle: Pointer)
         val (w, h) = renderSize(property("dwidth"), property("dheight")) ?: return
         val bmp = pool[poolIndex]?.takeIf { it.width == w && it.height == h } ?: Bitmap().also {
             it.allocPixels(ImageInfo(ColorInfo(ColorType.RGBA_8888, ColorAlphaType.OPAQUE, null), w, h))
+            // allocPixels leaves the buffer uninitialised; a render that does not fill it
+            // (a partial or pre-roll frame during warm-up) would otherwise show as garbage —
+            // the cycling blue/green at stream start. Start it opaque black.
+            it.erase(0xFF000000.toInt())
             pool[poolIndex]?.close(); pool[poolIndex] = it
         }
         val pix = bmp.peekPixels() ?: return
