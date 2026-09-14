@@ -110,6 +110,13 @@ kotlin {
 }
 
 dependencies {
+    // ── Shared heyarr-kmp modules ────────────────────────────────────────────────
+    // The pure client layer (:core) and shared Compose tokens (:ui). This app still
+    // carries its own copies of the not-yet-converged code (HeyarrApi, McpModels,
+    // Credential, transports — see Gate A/B); only the drift-free leaves are shared.
+    implementation(project(":core"))
+    implementation(project(":ui"))
+
     // ── Compose UI ───────────────────────────────────────────────────────────────
     val composeBom = platform("androidx.compose:compose-bom:2024.09.03")
     implementation(composeBom)

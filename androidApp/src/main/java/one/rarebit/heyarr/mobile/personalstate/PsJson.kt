@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.personalstate
 
-import one.rarebit.heyarr.mobile.net.JsonEscapes
+import one.rarebit.heyarr.core.net.JsonEscapes
 import one.rarebit.heyarr.mobile.net.JsonScan
 
 /**

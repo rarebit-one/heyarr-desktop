@@ -1,4 +1,5 @@
 package one.rarebit.heyarr.mobile.net
+import one.rarebit.heyarr.core.net.JsonEscapes
 
 /**
  * Reads the human-facing message out of a heyarr error body. heyarr renders API

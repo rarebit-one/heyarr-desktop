@@ -7,7 +7,8 @@ import one.rarebit.heyarr.mobile.mcp.McpTransportException
 import one.rarebit.heyarr.mobile.net.HttpResponse
 import one.rarebit.heyarr.mobile.net.HttpTransport
 import one.rarebit.heyarr.mobile.net.JsonScan
-import one.rarebit.heyarr.mobile.net.JsonWrite
+import one.rarebit.heyarr.core.mcp.JsonWrite
+import one.rarebit.heyarr.core.net.JsonArrays
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -80,6 +81,6 @@ class McpClientTest {
         val s = JsonWrite.obj(linkedMapOf("a" to "q\"uo\nte", "b" to null, "c" to listOf(1, true, mapOf("d" to 2.5)), "e" to 9_000_000_000L))
         assertEquals("""{"a":"q\"uo\nte","c":[1,true,{"d":2.5}],"e":9000000000}""", s)
         assertNull(JsonScan.valueStart(s, "b"))
-        assertEquals(listOf("a", "b\"c"), JsonWrite.parseStrings("""["a","b\"c"]"""))
+        assertEquals(listOf("a", "b\"c"), JsonArrays.parseStrings("""["a","b\"c"]"""))
     }
 }

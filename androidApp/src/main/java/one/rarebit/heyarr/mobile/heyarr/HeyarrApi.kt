@@ -36,7 +36,7 @@ import one.rarebit.heyarr.mobile.mcp.WantCreated
 import one.rarebit.heyarr.mobile.mcp.WantCreatedJson
 import one.rarebit.heyarr.mobile.mcp.WantJson
 import one.rarebit.heyarr.mobile.net.HttpTransport
-import one.rarebit.heyarr.mobile.net.JsonWrite
+import one.rarebit.heyarr.core.mcp.JsonWrite
 import one.rarebit.heyarr.mobile.net.ProblemDetail
 import one.rarebit.heyarr.mobile.search.FollowedItem
 import one.rarebit.heyarr.mobile.search.FollowedSource
