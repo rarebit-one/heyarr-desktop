@@ -1,9 +1,9 @@
 package one.rarebit.heyarr.mobile
 
 import one.rarebit.heyarr.core.auth.Credential
-import one.rarebit.heyarr.mobile.mcp.McpClient
-import one.rarebit.heyarr.mobile.mcp.McpOutcome
-import one.rarebit.heyarr.mobile.mcp.McpTransportException
+import one.rarebit.heyarr.core.mcp.McpClient
+import one.rarebit.heyarr.core.mcp.McpOutcome
+import one.rarebit.heyarr.core.mcp.McpTransportException
 import one.rarebit.heyarr.core.net.HttpResponse
 import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.heyarr.core.net.JsonScan

@@ -19,9 +19,9 @@ import one.rarebit.heyarr.core.mcp.Explanation
 import one.rarebit.heyarr.core.mcp.ExplanationJson
 import one.rarebit.heyarr.core.mcp.ExternalId
 import one.rarebit.heyarr.core.mcp.ExternalIdJson
-import one.rarebit.heyarr.mobile.mcp.McpClient
-import one.rarebit.heyarr.mobile.mcp.McpOutcome
-import one.rarebit.heyarr.mobile.mcp.McpTransportException
+import one.rarebit.heyarr.core.mcp.McpClient
+import one.rarebit.heyarr.core.mcp.McpOutcome
+import one.rarebit.heyarr.core.mcp.McpTransportException
 import one.rarebit.heyarr.core.mcp.PeerJson
 import one.rarebit.heyarr.core.mcp.PeerStatus
 import one.rarebit.heyarr.core.mcp.PlaybackStatus

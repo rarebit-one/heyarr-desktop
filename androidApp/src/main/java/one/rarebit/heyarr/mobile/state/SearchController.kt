@@ -10,7 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import one.rarebit.heyarr.mobile.heyarr.HeyarrApi
-import one.rarebit.heyarr.mobile.mcp.McpTransportException
+import one.rarebit.heyarr.core.mcp.McpTransportException
 import one.rarebit.heyarr.mobile.search.FollowedSource
 import one.rarebit.heyarr.mobile.theme.MediaType
 
