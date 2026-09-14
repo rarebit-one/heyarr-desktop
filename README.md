@@ -1,9 +1,17 @@
-# heyarr-desktop
+# heyarr-kmp
 
-A **desktop client for heyarr** — the "hey *arr" media-library manager: what content
-exists, what *should* exist, and why — built with **Compose Multiplatform** (JVM/desktop
-target). Targets Linux x64 **and aarch64** (Asahi/Omarchy); macOS and Windows come for
-free with the JVM.
+The **Kotlin Multiplatform monorepo** for heyarr's first-party clients — the "hey *arr"
+media-library manager: what content exists, what *should* exist, and why. It houses:
+
+- **`:composeApp`** — the desktop client (Compose Multiplatform, JVM; Linux x64 **and**
+  aarch64 (Asahi/Omarchy), with macOS/Windows for free via the JVM).
+- **`:androidApp`** — the Android client (Media3/Readium).
+- **`:core`** — the shared, pure-Kotlin client layer (JSON, MCP client + models,
+  `HttpTransport`, `Credential` incl. voidbind device auth, REST models, library/search
+  state) consumed by both apps.
+- **`:ui`** — the shared Compose design tokens/themes.
+
+The rest of this document describes the desktop client specifically.
 
 It is a real client, not a mockup: every screen has loading skeletons, empty and error
 states, an offline banner, keyboard operability with visible focus rings, and semantic
