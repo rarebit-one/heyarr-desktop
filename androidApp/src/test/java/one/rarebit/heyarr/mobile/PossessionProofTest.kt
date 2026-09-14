@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile
 
-import one.rarebit.heyarr.mobile.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.voidbind.Cert
 import one.rarebit.voidbind.Ed25519Signer
 import one.rarebit.voidbind.Ed25519Verifier

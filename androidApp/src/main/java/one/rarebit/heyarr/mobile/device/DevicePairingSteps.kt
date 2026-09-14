@@ -2,7 +2,7 @@ package one.rarebit.heyarr.mobile.device
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
-import one.rarebit.heyarr.mobile.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.voidbind.KeyRef
 import one.rarebit.voidbind.auth.PossessionProof

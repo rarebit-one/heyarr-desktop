@@ -8,7 +8,7 @@ import one.rarebit.heyarr.mobile.theme.MediaType
  *
  * The rule that matters: a route carries **identifiers and display hints only**.
  * Never a [one.rarebit.heyarr.mobile.playback.PlaybackTarget], never a
- * [one.rarebit.heyarr.mobile.auth.Credential] — those live in app state and a route
+ * [one.rarebit.heyarr.core.auth.Credential] — those live in app state and a route
  * re-resolves them by id. [Player] is argless for exactly that reason: what is
  * playing lives in the video session or the audio queue, the route only puts the
  * player in front.

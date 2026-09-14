@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.music
 
-import one.rarebit.heyarr.mobile.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.heyarr.mobile.catalog.CatalogClient
 import one.rarebit.heyarr.mobile.library.Work
 import one.rarebit.heyarr.core.net.HttpTransport

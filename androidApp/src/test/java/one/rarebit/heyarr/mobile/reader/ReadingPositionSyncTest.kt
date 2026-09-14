@@ -3,7 +3,7 @@ package one.rarebit.heyarr.mobile.reader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import one.rarebit.heyarr.mobile.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.heyarr.mobile.personalstate.FakeDeviceKey
 import one.rarebit.heyarr.mobile.personalstate.FakeServer
 import one.rarebit.heyarr.mobile.personalstate.IdentityCrypto

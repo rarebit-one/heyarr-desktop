@@ -12,10 +12,16 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Since Gate B, :core depends on voidbind-client (shared Credential.Device), pulled from
+    # the org's GitHub Packages — the repo in settings.gradle.kts authenticates with these.
+    env:
+      GITHUB_ACTOR: ${{ github.actor }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -40,10 +46,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libfontconfig1 libx11-6 libxrender1 libxtst6 libxi6
 
       # Scoped to the desktop + shared modules ONLY. A bare `./gradlew build` would also
-      # build :androidApp (heyarr-mobile), which pulls the private voidbind-client and needs
-      # a packages:read token — that lives in the separate android.yml. The :core/:ui android
-      # variants (built here via the SDK above) do NOT depend on voidbind, so this job stays
-      # token-free.
+      # build :androidApp (heyarr-mobile) — that's the separate android.yml job. Since Gate B,
+      # :core depends on voidbind-client (shared Credential.Device), so this job now needs the
+      # packages:read token (see env above); settings.gradle.kts authenticates the repo with it.
       - name: Build + JVM unit tests
         run: ./gradlew :core:build :ui:build :composeApp:build --no-daemon --stacktrace
 

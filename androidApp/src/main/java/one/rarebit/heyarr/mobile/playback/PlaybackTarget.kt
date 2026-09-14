@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.playback
 
-import one.rarebit.heyarr.mobile.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import java.util.Locale
 
 /**
