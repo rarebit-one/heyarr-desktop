@@ -2,7 +2,7 @@ package one.rarebit.heyarr.mobile.consumption
 
 import one.rarebit.heyarr.mobile.auth.Credential
 import one.rarebit.heyarr.mobile.net.HttpTransport
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 import one.rarebit.heyarr.mobile.net.ProblemDetail
 import one.rarebit.heyarr.mobile.playback.ClientCapabilities
 import one.rarebit.heyarr.mobile.search.AcquireClient

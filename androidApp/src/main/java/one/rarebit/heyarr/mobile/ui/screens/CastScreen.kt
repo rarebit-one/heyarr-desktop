@@ -36,8 +36,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import one.rarebit.heyarr.mobile.heyarr.McpResult
-import one.rarebit.heyarr.mobile.mcp.PlaybackStatus
-import one.rarebit.heyarr.mobile.mcp.Renderer
+import one.rarebit.heyarr.core.mcp.PlaybackStatus
+import one.rarebit.heyarr.core.mcp.Renderer
 import one.rarebit.heyarr.mobile.state.AppSession
 import one.rarebit.heyarr.mobile.theme.LocalMediaTheme
 import one.rarebit.heyarr.mobile.theme.Tokens

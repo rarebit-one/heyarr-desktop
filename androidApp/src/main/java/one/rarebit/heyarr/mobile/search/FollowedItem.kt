@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.search
 
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * One item a followed source's feed has yielded — heyarr-core `FollowedItem`

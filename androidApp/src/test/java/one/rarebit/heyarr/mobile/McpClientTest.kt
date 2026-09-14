@@ -6,7 +6,7 @@ import one.rarebit.heyarr.mobile.mcp.McpOutcome
 import one.rarebit.heyarr.mobile.mcp.McpTransportException
 import one.rarebit.heyarr.mobile.net.HttpResponse
 import one.rarebit.heyarr.mobile.net.HttpTransport
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 import one.rarebit.heyarr.core.mcp.JsonWrite
 import one.rarebit.heyarr.core.net.JsonArrays
 import org.junit.Assert.assertEquals

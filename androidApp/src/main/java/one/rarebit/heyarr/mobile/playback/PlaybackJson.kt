@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.playback
 
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * A minimal, dependency-free reader for `POST /api/v1/playback/plan` (heyarr-core

@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.personalstate
 
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * The playlist CRDT — an add-wins OR-Set with a Lamport total order, ported

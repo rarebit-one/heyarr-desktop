@@ -1,7 +1,7 @@
 package one.rarebit.heyarr.mobile.reader
 
 import android.content.Context
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * The reader's exact position per asset — a Readium Locator, as JSON — kept locally

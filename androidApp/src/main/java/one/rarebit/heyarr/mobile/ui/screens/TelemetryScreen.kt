@@ -36,7 +36,7 @@ import one.rarebit.heyarr.mobile.heyarr.JobInfo
 import one.rarebit.heyarr.mobile.heyarr.LibraryInfo
 import one.rarebit.heyarr.mobile.heyarr.ProviderInfo
 import one.rarebit.heyarr.mobile.heyarr.SessionInfo
-import one.rarebit.heyarr.mobile.mcp.PeerStatus
+import one.rarebit.heyarr.core.mcp.PeerStatus
 import one.rarebit.heyarr.mobile.state.AppSession
 import one.rarebit.heyarr.mobile.state.Connection
 import one.rarebit.heyarr.mobile.theme.Tokens

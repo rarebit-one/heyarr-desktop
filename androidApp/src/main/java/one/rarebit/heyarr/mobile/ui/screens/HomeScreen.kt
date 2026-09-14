@@ -29,8 +29,8 @@ import kotlinx.coroutines.launch
 import one.rarebit.heyarr.mobile.catalog.ContinueEntry
 import one.rarebit.heyarr.mobile.library.Variants
 import one.rarebit.heyarr.mobile.library.Work
-import one.rarebit.heyarr.mobile.mcp.SearchHit
-import one.rarebit.heyarr.mobile.mcp.Want
+import one.rarebit.heyarr.core.mcp.SearchHit
+import one.rarebit.heyarr.core.mcp.Want
 import one.rarebit.heyarr.mobile.nav.Route
 import one.rarebit.heyarr.mobile.nav.detailRoute
 import one.rarebit.heyarr.mobile.search.FollowedSource

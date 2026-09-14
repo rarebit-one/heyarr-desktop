@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import one.rarebit.heyarr.mobile.heyarr.DesiredItem
+import one.rarebit.heyarr.core.heyarr.DesiredItem
 import one.rarebit.heyarr.mobile.heyarr.JobInfo
 import one.rarebit.heyarr.mobile.heyarr.McpResult
 import one.rarebit.heyarr.mobile.library.Variants

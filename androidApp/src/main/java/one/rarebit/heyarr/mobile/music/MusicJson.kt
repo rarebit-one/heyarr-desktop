@@ -1,7 +1,7 @@
 package one.rarebit.heyarr.mobile.music
 
 import one.rarebit.heyarr.mobile.library.Work
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 object MusicJson {
 

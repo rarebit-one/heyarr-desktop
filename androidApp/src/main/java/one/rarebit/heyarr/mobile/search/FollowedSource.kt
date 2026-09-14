@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.search
 
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 import one.rarebit.heyarr.mobile.net.Timestamps
 
 /**

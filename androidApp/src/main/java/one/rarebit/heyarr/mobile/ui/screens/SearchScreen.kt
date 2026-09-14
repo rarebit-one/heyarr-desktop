@@ -48,8 +48,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import one.rarebit.heyarr.mobile.heyarr.McpResult
-import one.rarebit.heyarr.mobile.mcp.DiscoveryHit
-import one.rarebit.heyarr.mobile.mcp.EpisodeHit
+import one.rarebit.heyarr.core.mcp.DiscoveryHit
+import one.rarebit.heyarr.core.mcp.EpisodeHit
 import one.rarebit.heyarr.mobile.nav.Route
 import one.rarebit.heyarr.mobile.nav.detailRoute
 import one.rarebit.heyarr.mobile.state.AppSession

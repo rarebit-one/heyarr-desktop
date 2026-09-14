@@ -1,7 +1,7 @@
 package one.rarebit.heyarr.mobile.search
 
 import one.rarebit.heyarr.core.net.JsonEscapes
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * Dependency-free parser for heyarr's `POST /api/v1/search` response body

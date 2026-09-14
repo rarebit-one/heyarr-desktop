@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.personalstate
 
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * The reading-position CRDT — a per-publication last-writer-wins register, ported

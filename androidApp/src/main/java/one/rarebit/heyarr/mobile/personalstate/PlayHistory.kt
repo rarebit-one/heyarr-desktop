@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.personalstate
 
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * The play-history CRDT — a grow-only set of play events (a G-Set), ported from

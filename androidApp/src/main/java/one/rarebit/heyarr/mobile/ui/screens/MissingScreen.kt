@@ -31,7 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import one.rarebit.heyarr.mobile.heyarr.McpResult
-import one.rarebit.heyarr.mobile.mcp.Want
+import one.rarebit.heyarr.core.mcp.Want
 import one.rarebit.heyarr.mobile.nav.Route
 import one.rarebit.heyarr.mobile.nav.detailRoute
 import one.rarebit.heyarr.mobile.state.AppSession

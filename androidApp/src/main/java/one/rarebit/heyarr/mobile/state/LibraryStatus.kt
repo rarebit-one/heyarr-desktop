@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.state
 
-import one.rarebit.heyarr.mobile.heyarr.DesiredItem
+import one.rarebit.heyarr.core.heyarr.DesiredItem
 
 /**
  * What the library says about a work, derived ONLY from real want state — never from
