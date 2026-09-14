@@ -1,5 +1,7 @@
 package one.rarebit.heyarr.desktop.state
 
+import one.rarebit.heyarr.core.state.*
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,10 +11,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import one.rarebit.heyarr.desktop.feeds.FollowedSource
+import one.rarebit.heyarr.core.feeds.FollowedSource
 import one.rarebit.heyarr.desktop.heyarr.HeyarrApi
-import one.rarebit.heyarr.desktop.mcp.McpTransportException
-import one.rarebit.heyarr.desktop.theme.MediaType
+import one.rarebit.heyarr.core.mcp.McpTransportException
+import one.rarebit.heyarr.core.theme.MediaType
 
 /**
  * Universal search: one query, every media kind at once. On each keystroke the query is

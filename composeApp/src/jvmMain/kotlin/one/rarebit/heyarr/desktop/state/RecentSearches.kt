@@ -1,7 +1,9 @@
 package one.rarebit.heyarr.desktop.state
 
-import one.rarebit.heyarr.desktop.mcp.JsonWrite
-import one.rarebit.heyarr.desktop.net.JsonScan
+import one.rarebit.heyarr.core.state.*
+
+import one.rarebit.heyarr.core.mcp.JsonWrite
+import one.rarebit.heyarr.core.net.JsonScan
 import java.io.File
 
 /**
@@ -46,7 +48,7 @@ class RecentSearches(private val file: File, private val max: Int = 8) {
                     i++
                     while (i < array.length && array[i] != '"') {
                         if (array[i] == '\\' && i + 1 < array.length) {
-                            i = one.rarebit.heyarr.desktop.net.JsonEscapes.append(sb, array, i)
+                            i = one.rarebit.heyarr.core.net.JsonEscapes.append(sb, array, i)
                         } else {
                             sb.append(array[i]); i++
                         }

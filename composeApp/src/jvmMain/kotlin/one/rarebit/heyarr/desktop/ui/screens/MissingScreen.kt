@@ -31,12 +31,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import one.rarebit.heyarr.desktop.heyarr.McpResult
-import one.rarebit.heyarr.desktop.mcp.Want
+import one.rarebit.heyarr.core.mcp.Want
 import one.rarebit.heyarr.desktop.state.AppSession
-import one.rarebit.heyarr.desktop.state.LibraryStatus
+import one.rarebit.heyarr.core.state.LibraryStatus
 import one.rarebit.heyarr.desktop.state.Toast
-import one.rarebit.heyarr.desktop.theme.MediaType
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.core.theme.MediaType
+import one.rarebit.heyarr.ui.theme.Tokens
 import one.rarebit.heyarr.desktop.ui.Route
 import one.rarebit.heyarr.desktop.ui.components.EmptyState
 import one.rarebit.heyarr.desktop.ui.components.ErrorState

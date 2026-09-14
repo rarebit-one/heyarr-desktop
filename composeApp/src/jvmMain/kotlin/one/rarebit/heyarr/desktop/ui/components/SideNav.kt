@@ -47,7 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import one.rarebit.heyarr.desktop.state.Connection
 import one.rarebit.heyarr.desktop.theme.LocalMediaTheme
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.ui.theme.Tokens
 import one.rarebit.heyarr.desktop.ui.Route
 
 /** A nav destination: label, icon, route, optional keyboard hint. */

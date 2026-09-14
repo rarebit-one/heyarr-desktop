@@ -1,7 +1,7 @@
 package one.rarebit.heyarr.desktop.music
 
 import one.rarebit.heyarr.desktop.library.PrimaryAsset
-import one.rarebit.heyarr.desktop.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * One asset of a work — heyarr-core `WorkAsset` from `GET /api/v1/works/{id}/assets`

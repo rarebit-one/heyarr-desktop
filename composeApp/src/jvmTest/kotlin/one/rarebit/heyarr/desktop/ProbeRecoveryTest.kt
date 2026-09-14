@@ -7,9 +7,9 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import one.rarebit.heyarr.desktop.mcp.McpTransportException
-import one.rarebit.heyarr.desktop.net.HttpResponse
-import one.rarebit.heyarr.desktop.net.HttpTransport
+import one.rarebit.heyarr.core.mcp.McpTransportException
+import one.rarebit.heyarr.core.net.HttpResponse
+import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.heyarr.desktop.open.BlobDownloader
 import one.rarebit.heyarr.desktop.open.DownloadResult
 import one.rarebit.heyarr.desktop.open.ExternalOpener

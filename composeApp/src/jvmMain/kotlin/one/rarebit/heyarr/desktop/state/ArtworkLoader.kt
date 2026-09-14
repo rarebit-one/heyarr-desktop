@@ -1,5 +1,7 @@
 package one.rarebit.heyarr.desktop.state
 
+import one.rarebit.heyarr.core.state.*
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState

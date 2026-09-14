@@ -1,47 +1,49 @@
 package one.rarebit.heyarr.desktop.heyarr
 
-import one.rarebit.heyarr.desktop.auth.Credential
-import one.rarebit.heyarr.desktop.feeds.FollowedSource
-import one.rarebit.heyarr.desktop.feeds.FollowedSourcesJson
+import one.rarebit.heyarr.core.heyarr.*
+
+import one.rarebit.heyarr.core.auth.Credential
+import one.rarebit.heyarr.core.feeds.FollowedSource
+import one.rarebit.heyarr.core.feeds.FollowedSourcesJson
 import one.rarebit.heyarr.desktop.library.LibraryClient
 import one.rarebit.heyarr.desktop.library.Work
 import one.rarebit.heyarr.desktop.library.WorkDetail
 import one.rarebit.heyarr.desktop.library.WorkDetailClient
 import one.rarebit.heyarr.desktop.library.WorksJson
-import one.rarebit.heyarr.desktop.mcp.DiscoveryHit
-import one.rarebit.heyarr.desktop.mcp.DiscoveryJson
-import one.rarebit.heyarr.desktop.mcp.Explanation
-import one.rarebit.heyarr.desktop.mcp.ExplanationJson
-import one.rarebit.heyarr.desktop.mcp.ExternalId
-import one.rarebit.heyarr.desktop.mcp.ExternalIdJson
-import one.rarebit.heyarr.desktop.mcp.McpClient
-import one.rarebit.heyarr.desktop.mcp.McpOutcome
-import one.rarebit.heyarr.desktop.mcp.McpTransportException
-import one.rarebit.heyarr.desktop.mcp.PeerJson
-import one.rarebit.heyarr.desktop.mcp.PeerStatus
-import one.rarebit.heyarr.desktop.mcp.PlaybackStatus
-import one.rarebit.heyarr.desktop.mcp.PlaybackStatusJson
-import one.rarebit.heyarr.desktop.mcp.QueuedJob
-import one.rarebit.heyarr.desktop.mcp.QueuedJobJson
-import one.rarebit.heyarr.desktop.mcp.ReleaseToExplain
-import one.rarebit.heyarr.desktop.mcp.Renderer
-import one.rarebit.heyarr.desktop.mcp.RendererJson
-import one.rarebit.heyarr.desktop.mcp.Replica
-import one.rarebit.heyarr.desktop.mcp.ReplicaJson
-import one.rarebit.heyarr.desktop.mcp.Satisfaction
-import one.rarebit.heyarr.desktop.mcp.SatisfactionJson
-import one.rarebit.heyarr.desktop.mcp.SearchHits
-import one.rarebit.heyarr.desktop.mcp.SearchHitsJson
-import one.rarebit.heyarr.desktop.mcp.Want
-import one.rarebit.heyarr.desktop.mcp.WantCreated
-import one.rarebit.heyarr.desktop.mcp.WantCreatedJson
-import one.rarebit.heyarr.desktop.mcp.WantJson
+import one.rarebit.heyarr.core.mcp.DiscoveryHit
+import one.rarebit.heyarr.core.mcp.DiscoveryJson
+import one.rarebit.heyarr.core.mcp.Explanation
+import one.rarebit.heyarr.core.mcp.ExplanationJson
+import one.rarebit.heyarr.core.mcp.ExternalId
+import one.rarebit.heyarr.core.mcp.ExternalIdJson
+import one.rarebit.heyarr.core.mcp.McpClient
+import one.rarebit.heyarr.core.mcp.McpOutcome
+import one.rarebit.heyarr.core.mcp.McpTransportException
+import one.rarebit.heyarr.core.mcp.PeerJson
+import one.rarebit.heyarr.core.mcp.PeerStatus
+import one.rarebit.heyarr.core.mcp.PlaybackStatus
+import one.rarebit.heyarr.core.mcp.PlaybackStatusJson
+import one.rarebit.heyarr.core.mcp.QueuedJob
+import one.rarebit.heyarr.core.mcp.QueuedJobJson
+import one.rarebit.heyarr.core.mcp.ReleaseToExplain
+import one.rarebit.heyarr.core.mcp.Renderer
+import one.rarebit.heyarr.core.mcp.RendererJson
+import one.rarebit.heyarr.core.mcp.Replica
+import one.rarebit.heyarr.core.mcp.ReplicaJson
+import one.rarebit.heyarr.core.mcp.Satisfaction
+import one.rarebit.heyarr.core.mcp.SatisfactionJson
+import one.rarebit.heyarr.core.mcp.SearchHits
+import one.rarebit.heyarr.core.mcp.SearchHitsJson
+import one.rarebit.heyarr.core.mcp.Want
+import one.rarebit.heyarr.core.mcp.WantCreated
+import one.rarebit.heyarr.core.mcp.WantCreatedJson
+import one.rarebit.heyarr.core.mcp.WantJson
 import one.rarebit.heyarr.desktop.music.Track
 import one.rarebit.heyarr.desktop.music.TracksJson
-import one.rarebit.heyarr.desktop.mcp.JsonWrite
-import one.rarebit.heyarr.desktop.net.HttpTransport
-import one.rarebit.heyarr.desktop.net.JsonScan
-import one.rarebit.heyarr.desktop.theme.MediaType
+import one.rarebit.heyarr.core.mcp.JsonWrite
+import one.rarebit.heyarr.core.net.HttpTransport
+import one.rarebit.heyarr.core.net.JsonScan
+import one.rarebit.heyarr.core.theme.MediaType
 import java.io.IOException
 import java.net.URLEncoder
 
@@ -166,7 +168,7 @@ class HeyarrApi(
         }
         val viaTool = mcp.call("play_here", toolArgs).map { }
         if (viaTool !is McpResult.Refused || udn == null || !viaTool.message.contains("tool failed")) return viaTool
-        val body = one.rarebit.heyarr.desktop.mcp.JsonWrite.obj(buildMap<String, Any?> {
+        val body = one.rarebit.heyarr.core.mcp.JsonWrite.obj(buildMap<String, Any?> {
             put("asset_id", assetId); if (forceDirect) put("force_direct", true)
         })
         val resp = try {
@@ -276,7 +278,7 @@ class HeyarrApi(
      * tool for a scoped want; this REST route is the one the mobile client uses.
      */
     fun wantEdition(workId: String, editionId: String, qualityProfile: String, monitor: Boolean = true, reason: String? = null): McpResult<DesiredItem?> {
-        val body = one.rarebit.heyarr.desktop.mcp.JsonWrite.obj(linkedMapOf("scope" to "edition", "work_id" to workId, "edition_id" to editionId, "quality_profile" to qualityProfile, "monitor" to monitor, "reason" to reason))
+        val body = one.rarebit.heyarr.core.mcp.JsonWrite.obj(linkedMapOf("scope" to "edition", "work_id" to workId, "edition_id" to editionId, "quality_profile" to qualityProfile, "monitor" to monitor, "reason" to reason))
         val resp = try {
             http.post("$baseUrl/api/v1/desired", body, "application/json", credential.asHeader())
         } catch (e: IOException) { throw McpTransportException("heyarr is unreachable: ${e.message}", e) }
@@ -299,7 +301,7 @@ class HeyarrApi(
         ContinueJson.list(get("$baseUrl/api/v1/consumption/continue?limit=$limit", "GET /consumption/continue"))
 
     /** `GET /api/v1/followed-sources/{id}/items` — a followed source's archived items (existing feeds client). */
-    fun followedItems(sourceId: String): List<one.rarebit.heyarr.desktop.feeds.FollowedItem> =
+    fun followedItems(sourceId: String): List<one.rarebit.heyarr.core.feeds.FollowedItem> =
         one.rarebit.heyarr.desktop.feeds.FeedsClient(http, baseUrl, credential).listItems(sourceId)
 
     /** `GET /api/v1/quality-profiles` — the names a want must be measured against. */

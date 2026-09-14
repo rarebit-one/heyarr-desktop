@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.desktop.catalog
 
-import one.rarebit.heyarr.desktop.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * A browse grouping row — heyarr-core `GroupSummary` (ADR-0075), the shape returned by

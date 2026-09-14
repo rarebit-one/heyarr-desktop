@@ -1,7 +1,7 @@
 package one.rarebit.heyarr.desktop.library
 
-import one.rarebit.heyarr.desktop.auth.Credential
-import one.rarebit.heyarr.desktop.net.HttpTransport
+import one.rarebit.heyarr.core.auth.Credential
+import one.rarebit.heyarr.core.net.HttpTransport
 import java.net.URLEncoder
 
 /**

@@ -1,12 +1,14 @@
 package one.rarebit.heyarr.desktop.state
 
+import one.rarebit.heyarr.core.state.*
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import one.rarebit.heyarr.desktop.mcp.JsonWrite
-import one.rarebit.heyarr.desktop.net.JsonScan
-import one.rarebit.heyarr.desktop.theme.MediaType
+import one.rarebit.heyarr.core.mcp.JsonWrite
+import one.rarebit.heyarr.core.net.JsonScan
+import one.rarebit.heyarr.core.theme.MediaType
 import java.io.File
 import java.net.URI
 import java.net.URLEncoder

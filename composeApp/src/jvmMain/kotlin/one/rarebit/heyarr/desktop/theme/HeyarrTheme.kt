@@ -1,5 +1,9 @@
 package one.rarebit.heyarr.desktop.theme
 
+import one.rarebit.heyarr.core.theme.MediaType
+
+import one.rarebit.heyarr.ui.theme.*
+
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes

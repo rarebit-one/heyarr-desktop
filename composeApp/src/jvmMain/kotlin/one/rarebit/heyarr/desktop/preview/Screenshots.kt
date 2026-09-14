@@ -12,7 +12,7 @@ import one.rarebit.heyarr.desktop.playback.Player
 import one.rarebit.heyarr.desktop.settings.DesktopConfig
 import one.rarebit.heyarr.desktop.settings.InMemorySettingsStore
 import one.rarebit.heyarr.desktop.state.ArtworkLoader
-import one.rarebit.heyarr.desktop.theme.MediaType
+import one.rarebit.heyarr.core.theme.MediaType
 import one.rarebit.heyarr.desktop.ui.App
 import one.rarebit.heyarr.desktop.ui.Route
 import org.jetbrains.skia.EncodedImageFormat

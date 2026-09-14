@@ -1,5 +1,7 @@
 package one.rarebit.heyarr.desktop.net
 
+import one.rarebit.heyarr.core.net.*
+
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest

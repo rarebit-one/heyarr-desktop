@@ -78,7 +78,7 @@ import kotlinx.coroutines.launch
 import one.rarebit.heyarr.desktop.heyarr.McpResult
 import one.rarebit.heyarr.desktop.library.Series
 import one.rarebit.heyarr.desktop.playback.MpvTrack
-import one.rarebit.heyarr.desktop.mcp.Renderer
+import one.rarebit.heyarr.core.mcp.Renderer
 import one.rarebit.heyarr.desktop.playback.EmbeddedPlayer
 import one.rarebit.heyarr.desktop.playback.PlayResult
 import one.rarebit.heyarr.desktop.playback.PlayerState
@@ -87,9 +87,9 @@ import one.rarebit.heyarr.desktop.state.Toast
 import one.rarebit.heyarr.desktop.state.rememberArtwork
 import one.rarebit.heyarr.desktop.theme.LocalMediaTheme
 import one.rarebit.heyarr.desktop.theme.MediaScope
-import one.rarebit.heyarr.desktop.theme.MediaThemes
-import one.rarebit.heyarr.desktop.theme.MediaType
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.ui.theme.MediaThemes
+import one.rarebit.heyarr.core.theme.MediaType
+import one.rarebit.heyarr.ui.theme.Tokens
 import one.rarebit.heyarr.desktop.ui.Route
 import one.rarebit.heyarr.desktop.ui.components.Artwork
 import one.rarebit.heyarr.desktop.ui.components.FilterChip

@@ -41,7 +41,7 @@ import androidx.compose.ui.unit.dp
 import one.rarebit.heyarr.desktop.state.PlaybackSession
 import one.rarebit.heyarr.desktop.theme.LocalMediaTheme
 import one.rarebit.heyarr.desktop.theme.MediaScope
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.ui.theme.Tokens
 
 /**
  * The persistent transport at the foot of the window while something plays and the

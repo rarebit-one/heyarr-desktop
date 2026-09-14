@@ -63,10 +63,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import one.rarebit.heyarr.desktop.feeds.FollowedItem
-import one.rarebit.heyarr.desktop.heyarr.Candidate
-import one.rarebit.heyarr.desktop.heyarr.ContinueEntry
-import one.rarebit.heyarr.desktop.heyarr.DesiredItem
+import one.rarebit.heyarr.core.feeds.FollowedItem
+import one.rarebit.heyarr.core.heyarr.Candidate
+import one.rarebit.heyarr.core.heyarr.ContinueEntry
+import one.rarebit.heyarr.core.heyarr.DesiredItem
 import one.rarebit.heyarr.desktop.heyarr.McpResult
 import one.rarebit.heyarr.desktop.library.Episode
 import one.rarebit.heyarr.desktop.library.PrimaryAsset
@@ -75,13 +75,13 @@ import one.rarebit.heyarr.desktop.library.Series
 import one.rarebit.heyarr.desktop.library.Variants
 import one.rarebit.heyarr.desktop.library.Work
 import one.rarebit.heyarr.desktop.library.WorkDetail
-import one.rarebit.heyarr.desktop.mcp.Explanation
-import one.rarebit.heyarr.desktop.mcp.ExternalId
-import one.rarebit.heyarr.desktop.mcp.ReleaseAttributes
-import one.rarebit.heyarr.desktop.mcp.ReleaseToExplain
-import one.rarebit.heyarr.desktop.mcp.Renderer
-import one.rarebit.heyarr.desktop.mcp.Replica
-import one.rarebit.heyarr.desktop.mcp.Satisfaction
+import one.rarebit.heyarr.core.mcp.Explanation
+import one.rarebit.heyarr.core.mcp.ExternalId
+import one.rarebit.heyarr.core.mcp.ReleaseAttributes
+import one.rarebit.heyarr.core.mcp.ReleaseToExplain
+import one.rarebit.heyarr.core.mcp.Renderer
+import one.rarebit.heyarr.core.mcp.Replica
+import one.rarebit.heyarr.core.mcp.Satisfaction
 import one.rarebit.heyarr.desktop.music.Track
 import one.rarebit.heyarr.desktop.playback.PlayResult
 import one.rarebit.heyarr.desktop.state.AppSession
@@ -89,14 +89,14 @@ import one.rarebit.heyarr.desktop.state.ExternalEpisode
 import one.rarebit.heyarr.desktop.state.ExternalMeta
 import one.rarebit.heyarr.desktop.state.MetaKey
 import one.rarebit.heyarr.desktop.ui.components.rememberCover
-import one.rarebit.heyarr.desktop.state.LibraryStatus
+import one.rarebit.heyarr.core.state.LibraryStatus
 import one.rarebit.heyarr.desktop.state.Toast
 import one.rarebit.heyarr.desktop.state.rememberArtwork
 import one.rarebit.heyarr.desktop.theme.LocalMediaTheme
 import one.rarebit.heyarr.desktop.theme.MediaScope
-import one.rarebit.heyarr.desktop.theme.MediaThemes
-import one.rarebit.heyarr.desktop.theme.MediaType
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.ui.theme.MediaThemes
+import one.rarebit.heyarr.core.theme.MediaType
+import one.rarebit.heyarr.ui.theme.Tokens
 import one.rarebit.heyarr.desktop.ui.Route
 import one.rarebit.heyarr.desktop.ui.components.Artwork
 import one.rarebit.heyarr.desktop.ui.components.ErrorState
@@ -328,7 +328,7 @@ private fun DetailHero(session: AppSession, detail: WorkDetail, type: MediaType,
             kicker = cont?.let { "Continue · ${it.editionLabel ?: ""} ${it.progressLabel ?: ""}".trim() },
             primary = {
                 when {
-                    cont?.blobHash != null && type != MediaType.BOOK -> PrimaryButton("Continue", { playLocal(session, state, cont.blobHash, "${work.title} — ${cont.editionLabel ?: ""}", scope, assetId = cont.assetId, type = type) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
+                    cont?.blobHash != null && type != MediaType.BOOK -> PrimaryButton("Continue", { playLocal(session, state, cont.blobHash!!, "${work.title} — ${cont.editionLabel ?: ""}", scope, assetId = cont.assetId, type = type) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
                     type == MediaType.SERIES && first != null -> PrimaryButton("Play ${first.code ?: ""}".trim(), { playLocal(session, state, first.asset.blobHash!!, Series.playTitle(work, first), scope, assetId = first.asset.id, type = type) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
                     asset == null && wants.isNotEmpty() -> PrimaryButton("Look for it", {
                         val a = session.api ?: return@PrimaryButton
@@ -655,7 +655,7 @@ private fun ArchiveBlock(session: AppSession, state: DetailState) {
                 if (item.archived && item.workId != null) SecondaryButton("Open", {
                     val a = session.api ?: return@SecondaryButton
                     scope.launch {
-                        val d = session.io { a.work(item.workId) }.getOrNull()
+                        val d = session.io { a.work(item.workId!!) }.getOrNull()
                         val asset = d?.primaryAsset
                         if (asset == null) session.toast(Toast.Kind.INFO, "No archived bytes held for this item yet.")
                         else session.io { session.openExternally.open(session.config.baseUrl, asset.blobHash, session.config.bearerToken.trim(), null, asset.mime ?: "text/html", item.title) }.getOrNull()?.let { session.toast(Toast.Kind.INFO, it) }

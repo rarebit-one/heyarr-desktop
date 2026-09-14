@@ -56,14 +56,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import one.rarebit.heyarr.desktop.state.LibraryStatus
-import one.rarebit.heyarr.desktop.theme.CardAspect
+import one.rarebit.heyarr.core.state.LibraryStatus
+import one.rarebit.heyarr.ui.theme.CardAspect
 import one.rarebit.heyarr.desktop.theme.LocalAppearance
 import one.rarebit.heyarr.desktop.theme.LocalMediaTheme
 import one.rarebit.heyarr.desktop.theme.MediaScope
-import one.rarebit.heyarr.desktop.theme.MediaThemes
-import one.rarebit.heyarr.desktop.theme.MediaType
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.ui.theme.MediaThemes
+import one.rarebit.heyarr.core.theme.MediaType
+import one.rarebit.heyarr.ui.theme.Tokens
 
 /** The glyph a type's placeholder art shows. */
 fun MediaType.icon(): ImageVector = when (this) {

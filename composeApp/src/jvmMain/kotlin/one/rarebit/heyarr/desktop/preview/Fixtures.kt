@@ -1,8 +1,8 @@
 package one.rarebit.heyarr.desktop.preview
 
-import one.rarebit.heyarr.desktop.net.HttpResponse
-import one.rarebit.heyarr.desktop.net.HttpTransport
-import one.rarebit.heyarr.desktop.net.JsonScan
+import one.rarebit.heyarr.core.net.HttpResponse
+import one.rarebit.heyarr.core.net.HttpTransport
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * Canned heyarr answers — the shapes observed on a live node, trimmed — served by a
@@ -162,7 +162,7 @@ object Fixtures {
     /** JSON-RPC envelope around a tool result. */
     fun rpc(text: String) = """{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":${quote(text)}}]}}"""
     fun rpcError(message: String, tool: String) = """{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":${quote(message)},"data":{"tool":"$tool"}}}"""
-    private fun quote(s: String) = buildString { one.rarebit.heyarr.desktop.mcp.JsonWrite.writeString(this, s) }
+    private fun quote(s: String) = buildString { one.rarebit.heyarr.core.mcp.JsonWrite.writeString(this, s) }
 }
 
 /** A fake transport answering from [Fixtures]; records every request for assertions. */

@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.desktop.settings
 
-import one.rarebit.heyarr.desktop.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 import java.io.File
 
 /**

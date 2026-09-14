@@ -11,7 +11,7 @@ import java.time.Duration
 /**
  * Downloads an authenticated blob to a local temp file so an [ExternalOpener] can hand it
  * to the system reader/browser. This is a SEPARATE seam from the String-bodied
- * [one.rarebit.heyarr.desktop.net.HttpTransport]: books and archived articles are BINARY
+ * [one.rarebit.heyarr.core.net.HttpTransport]: books and archived articles are BINARY
  * (EPUB/PDF/CBZ/single-file HTML), and decoding those bytes as a UTF-8 String — which is
  * all the shared transport does — corrupts them. So the binary read streams straight to a
  * file here, reusing only the pure [BlobStream] URL builder and the bearer header shape.

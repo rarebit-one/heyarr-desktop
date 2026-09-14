@@ -1,13 +1,13 @@
 package one.rarebit.heyarr.desktop
 
-import one.rarebit.heyarr.desktop.feeds.FollowedSourcesJson
-import one.rarebit.heyarr.desktop.mcp.SearchHitsJson
+import one.rarebit.heyarr.core.feeds.FollowedSourcesJson
+import one.rarebit.heyarr.core.mcp.SearchHitsJson
 import one.rarebit.heyarr.desktop.preview.Fixtures
-import one.rarebit.heyarr.desktop.state.SearchFilter
-import one.rarebit.heyarr.desktop.state.SearchGrouping
-import one.rarebit.heyarr.desktop.state.SearchRow
-import one.rarebit.heyarr.desktop.state.Segment
-import one.rarebit.heyarr.desktop.theme.MediaType
+import one.rarebit.heyarr.core.state.SearchFilter
+import one.rarebit.heyarr.core.state.SearchGrouping
+import one.rarebit.heyarr.core.state.SearchRow
+import one.rarebit.heyarr.core.state.Segment
+import one.rarebit.heyarr.core.theme.MediaType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

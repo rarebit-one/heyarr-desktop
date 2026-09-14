@@ -1,9 +1,9 @@
 package one.rarebit.heyarr.desktop
 
-import one.rarebit.heyarr.desktop.heyarr.DesiredItemJson
+import one.rarebit.heyarr.core.heyarr.DesiredItemJson
 import one.rarebit.heyarr.desktop.preview.Fixtures
-import one.rarebit.heyarr.desktop.state.LibraryIndex
-import one.rarebit.heyarr.desktop.state.LibraryStatus
+import one.rarebit.heyarr.core.state.LibraryIndex
+import one.rarebit.heyarr.core.state.LibraryStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

@@ -20,6 +20,10 @@ kotlin {
     sourceSets {
         val jvmMain by getting {
             dependencies {
+                // Shared modules: pure domain (`:core`) + Compose design layer (`:ui`).
+                // JdkHttpTransport / HeyarrApi (this module) implement/orchestrate over them.
+                implementation(project(":core"))
+                implementation(project(":ui"))
                 implementation(compose.desktop.currentOs)
                 implementation(compose.runtime)
                 implementation(compose.foundation)

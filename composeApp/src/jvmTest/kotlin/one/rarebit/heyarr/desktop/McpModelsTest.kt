@@ -1,16 +1,16 @@
 package one.rarebit.heyarr.desktop
 
-import one.rarebit.heyarr.desktop.heyarr.CandidateJson
-import one.rarebit.heyarr.desktop.heyarr.DesiredItemJson
-import one.rarebit.heyarr.desktop.heyarr.QualityProfileJson
-import one.rarebit.heyarr.desktop.mcp.ExplanationJson
-import one.rarebit.heyarr.desktop.mcp.PlaybackStatusJson
-import one.rarebit.heyarr.desktop.mcp.ReleaseAttributes
-import one.rarebit.heyarr.desktop.mcp.ReleaseToExplain
-import one.rarebit.heyarr.desktop.mcp.RendererJson
-import one.rarebit.heyarr.desktop.mcp.SatisfactionJson
-import one.rarebit.heyarr.desktop.mcp.SearchHitsJson
-import one.rarebit.heyarr.desktop.mcp.WantJson
+import one.rarebit.heyarr.core.heyarr.CandidateJson
+import one.rarebit.heyarr.core.heyarr.DesiredItemJson
+import one.rarebit.heyarr.core.heyarr.QualityProfileJson
+import one.rarebit.heyarr.core.mcp.ExplanationJson
+import one.rarebit.heyarr.core.mcp.PlaybackStatusJson
+import one.rarebit.heyarr.core.mcp.ReleaseAttributes
+import one.rarebit.heyarr.core.mcp.ReleaseToExplain
+import one.rarebit.heyarr.core.mcp.RendererJson
+import one.rarebit.heyarr.core.mcp.SatisfactionJson
+import one.rarebit.heyarr.core.mcp.SearchHitsJson
+import one.rarebit.heyarr.core.mcp.WantJson
 import one.rarebit.heyarr.desktop.preview.Fixtures
 import kotlin.test.Test
 import kotlin.test.assertEquals
