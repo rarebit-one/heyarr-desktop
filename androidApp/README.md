@@ -7,7 +7,7 @@ client rather than a generic Subsonic app.
 
 It wears the **Heyarr Desktop design language** — the same tokens, media-keyed accents,
 self-hosted Inter / Montserrat / Rubik faces and components as
-[`rarebit-one/heyarr-desktop`](https://github.com/rarebit-one/heyarr-desktop) — on a
+[`rarebit-one/heyarr-kmp`](https://github.com/rarebit-one/heyarr-kmp) — on a
 phone's bottom bar (a rail on a tablet), consumption first with curation one tab away.
 
 ## Screens

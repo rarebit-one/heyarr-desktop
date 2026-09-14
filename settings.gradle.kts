@@ -1,4 +1,4 @@
-rootProject.name = "heyarr-desktop"
+rootProject.name = "heyarr-kmp"
 
 pluginManagement {
     repositories {
