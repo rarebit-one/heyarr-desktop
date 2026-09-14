@@ -6,3 +6,12 @@ local.properties
 .idea/
 .DS_Store
 .worktrees/
+
+# Android (:androidApp) — signing material and build artifacts never get committed.
+*.jks
+*.keystore
+*.apk
+*.aab
+output-metadata.json
+.kotlin/
+captures/

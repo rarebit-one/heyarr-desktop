@@ -18,4 +18,13 @@ plugins {
     // the SDK (setup-android) so it builds the android variants; SDK-less desktop builds
     // simply skip the android target and are unaffected.
     id("com.android.library") version "8.7.3" apply false
+
+    // ── Android app (heyarr-mobile, folded in as :androidApp) ────────────────────
+    // Same AGP/Kotlin as above. The app module applies these; the multiplatform
+    // plugin (for :core/:ui/:composeApp) and the android plugins coexist fine since
+    // they apply to different modules. serialization is for nav route args only
+    // (nav/Routes.kt) — wire JSON stays hand-read on net/JsonScan, per the org rule.
+    id("com.android.application") version "8.7.3" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.3.20" apply false
 }
