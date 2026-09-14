@@ -39,8 +39,13 @@ jobs:
       - name: Skia runtime libraries
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libfontconfig1 libx11-6 libxrender1 libxtst6 libxi6
 
+      # Scoped to the desktop + shared modules ONLY. A bare `./gradlew build` would also
+      # build :androidApp (heyarr-mobile), which pulls the private voidbind-client and needs
+      # a packages:read token — that lives in the separate android.yml. The :core/:ui android
+      # variants (built here via the SDK above) do NOT depend on voidbind, so this job stays
+      # token-free.
       - name: Build + JVM unit tests
-        run: ./gradlew build --no-daemon --stacktrace
+        run: ./gradlew :core:build :ui:build :composeApp:build --no-daemon --stacktrace
 
       - name: Screenshots (off-screen, fixture data)
         run: ./gradlew :composeApp:screenshots --no-daemon
