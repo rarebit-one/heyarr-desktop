@@ -12,7 +12,7 @@ import one.rarebit.heyarr.mobile.consumption.ConsumptionReporter
 import one.rarebit.heyarr.mobile.consumption.InMemoryDeviceIdStore
 import one.rarebit.heyarr.mobile.consumption.Position
 import one.rarebit.heyarr.mobile.consumption.ProgressReporter
-import one.rarebit.heyarr.mobile.net.HttpResponse
+import one.rarebit.heyarr.core.net.HttpResponse
 import one.rarebit.heyarr.mobile.playback.AudioItem
 import one.rarebit.heyarr.mobile.playback.AudioSessionBridge
 import one.rarebit.heyarr.mobile.playback.AudioState

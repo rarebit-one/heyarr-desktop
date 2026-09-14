@@ -3,7 +3,7 @@ package one.rarebit.heyarr.mobile.catalog
 import one.rarebit.heyarr.mobile.auth.Credential
 import one.rarebit.heyarr.mobile.library.Work
 import one.rarebit.heyarr.mobile.library.WorksJson
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.heyarr.mobile.net.Timestamps
 import java.net.URLEncoder
 

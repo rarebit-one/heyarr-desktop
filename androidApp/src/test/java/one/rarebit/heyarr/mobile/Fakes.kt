@@ -2,8 +2,8 @@ package one.rarebit.heyarr.mobile
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import one.rarebit.heyarr.mobile.net.HttpResponse
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpResponse
+import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.heyarr.mobile.playback.AudioItem
 import one.rarebit.heyarr.mobile.playback.AudioPlayer
 import one.rarebit.heyarr.mobile.playback.AudioState

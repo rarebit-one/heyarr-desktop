@@ -1,7 +1,7 @@
 package one.rarebit.heyarr.mobile
 
 import one.rarebit.heyarr.mobile.auth.Credential
-import one.rarebit.heyarr.mobile.net.HttpResponse
+import one.rarebit.heyarr.core.net.HttpResponse
 import one.rarebit.heyarr.mobile.search.FollowedItemsJson
 import one.rarebit.heyarr.mobile.search.FollowedSourceClient
 import org.junit.Assert.assertEquals

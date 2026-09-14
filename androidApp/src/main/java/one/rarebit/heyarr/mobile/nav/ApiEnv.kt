@@ -1,7 +1,7 @@
 package one.rarebit.heyarr.mobile.nav
 
 import one.rarebit.heyarr.mobile.auth.Credential
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpTransport
 
 /**
  * One immutable snapshot of "who we are and where the node is", handed to every

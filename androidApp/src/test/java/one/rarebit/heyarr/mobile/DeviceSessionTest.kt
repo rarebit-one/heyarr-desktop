@@ -2,8 +2,8 @@ package one.rarebit.heyarr.mobile
 
 import one.rarebit.heyarr.mobile.auth.Credential
 import one.rarebit.heyarr.mobile.net.DeviceAuthTransport
-import one.rarebit.heyarr.mobile.net.HttpResponse
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpResponse
+import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.voidbind.Ed25519Signer
 import one.rarebit.voidbind.auth.DeviceCredential
 import one.rarebit.voidbind.auth.PossessionProof

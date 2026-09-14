@@ -3,7 +3,7 @@ package one.rarebit.heyarr.mobile.acquisition
 import one.rarebit.heyarr.mobile.auth.Credential
 import one.rarebit.heyarr.mobile.library.Want
 import one.rarebit.heyarr.mobile.library.WorkDetailJson
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.heyarr.core.net.JsonScan
 import one.rarebit.heyarr.mobile.net.ProblemDetail
 import one.rarebit.heyarr.mobile.search.AcquireClient

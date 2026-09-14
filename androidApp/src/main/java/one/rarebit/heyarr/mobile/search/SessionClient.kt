@@ -1,7 +1,7 @@
 package one.rarebit.heyarr.mobile.search
 
 import one.rarebit.heyarr.mobile.auth.Credential
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpTransport
 
 /**
  * A caller's own authority, as `GET /api/v1/session` reports it (heyarr-core

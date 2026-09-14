@@ -7,8 +7,8 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import one.rarebit.heyarr.mobile.auth.Credential
 import one.rarebit.heyarr.mobile.library.LibraryClient
-import one.rarebit.heyarr.mobile.net.HttpResponse
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpResponse
+import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.heyarr.mobile.personalstate.FakeDeviceKey
 import one.rarebit.heyarr.mobile.personalstate.FakeServer
 import one.rarebit.heyarr.mobile.personalstate.IdentityCrypto

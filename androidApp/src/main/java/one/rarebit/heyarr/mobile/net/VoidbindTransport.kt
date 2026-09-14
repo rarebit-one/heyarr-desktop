@@ -1,4 +1,5 @@
 package one.rarebit.heyarr.mobile.net
+import one.rarebit.heyarr.core.net.HttpTransport
 
 import android.util.Log
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
