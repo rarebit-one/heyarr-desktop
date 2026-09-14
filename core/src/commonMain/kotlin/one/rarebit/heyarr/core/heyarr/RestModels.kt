@@ -45,6 +45,7 @@ data class DesiredItem(
     val detail: String?,
     val bytesTotal: Long? = null,
     val bytesDone: Long? = null,
+    val managed: Boolean? = null,
     val updatedAt: String?,
 ) {
     /** Fraction 0f..1f of the in-flight transfer that is done, or null when
@@ -82,6 +83,7 @@ object DesiredItemJson {
             detail = acq?.let { JsonScan.stringField(it, "detail") },
             bytesTotal = acq?.let { JsonScan.longField(it, "bytes_total") },
             bytesDone = acq?.let { JsonScan.longField(it, "bytes_done") },
+            managed = acq?.let { JsonScan.boolField(it, "managed") },
             updatedAt = JsonScan.stringField(obj, "updated_at"),
         )
     }

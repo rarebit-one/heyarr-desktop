@@ -23,7 +23,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import one.rarebit.heyarr.mobile.mcp.Reason
+import one.rarebit.heyarr.core.mcp.Reason
 import one.rarebit.heyarr.mobile.theme.LocalMediaTheme
 import one.rarebit.heyarr.mobile.theme.RubikFamily
 import one.rarebit.heyarr.mobile.theme.Tokens

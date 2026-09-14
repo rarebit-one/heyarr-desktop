@@ -69,7 +69,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import one.rarebit.heyarr.mobile.heyarr.McpResult
 import one.rarebit.heyarr.mobile.library.WorkAsset
-import one.rarebit.heyarr.mobile.mcp.Renderer
+import one.rarebit.heyarr.core.mcp.Renderer
 import one.rarebit.heyarr.mobile.playback.PlaybackTarget
 import one.rarebit.heyarr.mobile.playback.QueueEntry
 import one.rarebit.heyarr.mobile.playback.VideoSession

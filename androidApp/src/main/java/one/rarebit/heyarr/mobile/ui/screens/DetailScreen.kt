@@ -64,8 +64,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import one.rarebit.heyarr.mobile.catalog.ContinueEntry
-import one.rarebit.heyarr.mobile.heyarr.Candidate
-import one.rarebit.heyarr.mobile.heyarr.DesiredItem
+import one.rarebit.heyarr.core.heyarr.Candidate
+import one.rarebit.heyarr.core.heyarr.DesiredItem
 import one.rarebit.heyarr.mobile.heyarr.HeyarrApi
 import one.rarebit.heyarr.mobile.heyarr.McpResult
 import one.rarebit.heyarr.mobile.heyarr.seriesWantState
@@ -75,13 +75,13 @@ import one.rarebit.heyarr.mobile.library.Series
 import one.rarebit.heyarr.mobile.library.Variants
 import one.rarebit.heyarr.mobile.library.Work
 import one.rarebit.heyarr.mobile.library.WorkAsset
-import one.rarebit.heyarr.mobile.mcp.Explanation
-import one.rarebit.heyarr.mobile.mcp.ExternalId
-import one.rarebit.heyarr.mobile.mcp.ReleaseAttributes
-import one.rarebit.heyarr.mobile.mcp.ReleaseToExplain
-import one.rarebit.heyarr.mobile.mcp.Renderer
-import one.rarebit.heyarr.mobile.mcp.Replica
-import one.rarebit.heyarr.mobile.mcp.Satisfaction
+import one.rarebit.heyarr.core.mcp.Explanation
+import one.rarebit.heyarr.core.mcp.ExternalId
+import one.rarebit.heyarr.core.mcp.ReleaseAttributes
+import one.rarebit.heyarr.core.mcp.ReleaseToExplain
+import one.rarebit.heyarr.core.mcp.Renderer
+import one.rarebit.heyarr.core.mcp.Replica
+import one.rarebit.heyarr.core.mcp.Satisfaction
 import one.rarebit.heyarr.mobile.music.Tracks
 import one.rarebit.heyarr.mobile.music.isPrimaryRole
 import one.rarebit.heyarr.mobile.music.trackTitle
@@ -649,7 +649,8 @@ private fun ArchiveBlock(state: DetailState, onOpen: (Route) -> Unit) {
                     Text(item.title, style = MaterialTheme.typography.titleSmall, color = if (item.archived) Tokens.textPrimary else Tokens.textDisabled)
                     Text(listOfNotNull(item.publishedAt?.take(10), if (item.archived) "archived" else "not archived yet", item.want?.summary?.takeIf { it.isNotBlank() }).joinToString("  ·  "), style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
                 }
-                if (item.archived && item.workId != null) SecondaryButton("Open", { onOpen(detailRoute(item.workId, MediaType.UNKNOWN, item.title, from = "Archive")) }, icon = Icons.Rounded.OpenInNew, compact = true)
+                val wid = item.workId
+                if (item.archived && wid != null) SecondaryButton("Open", { onOpen(detailRoute(wid, MediaType.UNKNOWN, item.title, from = "Archive")) }, icon = Icons.Rounded.OpenInNew, compact = true)
             }
         }
     }

@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile
 
-import one.rarebit.heyarr.mobile.heyarr.DesiredItemJson
+import one.rarebit.heyarr.core.heyarr.DesiredItemJson
 import one.rarebit.heyarr.mobile.preview.Fixtures
 import one.rarebit.heyarr.mobile.state.LibraryIndex
 import one.rarebit.heyarr.mobile.state.LibraryStatus

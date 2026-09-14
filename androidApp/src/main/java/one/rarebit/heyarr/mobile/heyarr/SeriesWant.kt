@@ -1,4 +1,5 @@
 package one.rarebit.heyarr.mobile.heyarr
+import one.rarebit.heyarr.core.heyarr.DesiredItem
 
 /**
  * What the desired state says about a *series* as a whole (ADR-0089).

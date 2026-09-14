@@ -1,7 +1,7 @@
 package one.rarebit.heyarr.mobile.personalstate
 
 import one.rarebit.heyarr.core.net.JsonEscapes
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * The JSON primitives the personal-state port needs beyond `net/JsonScan`:

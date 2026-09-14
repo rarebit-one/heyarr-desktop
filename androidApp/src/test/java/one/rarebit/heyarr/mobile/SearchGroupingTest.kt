@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile
 
-import one.rarebit.heyarr.mobile.mcp.SearchHitsJson
+import one.rarebit.heyarr.core.mcp.SearchHitsJson
 import one.rarebit.heyarr.mobile.preview.Fixtures
 import one.rarebit.heyarr.mobile.search.FollowedSourcesJson
 import one.rarebit.heyarr.mobile.state.SearchFilter

@@ -339,6 +339,7 @@ data class EpisodeHit(
     val contentType: String?,
     val assetId: String?,
     val blobHash: String?,
+    val mime: String? = null,
 )
 
 data class SearchHits(val works: List<SearchHit>, val episodes: List<EpisodeHit>, val truncated: Boolean)
@@ -371,6 +372,7 @@ object SearchHitsJson {
                 contentType = JsonScan.stringField(e, "content_type"),
                 assetId = asset?.let { JsonScan.stringField(it, "asset_id") },
                 blobHash = asset?.let { JsonScan.stringField(it, "blob_hash") },
+                mime = asset?.let { JsonScan.stringField(it, "mime") },
             )
         }
         val truncated = JsonScan.rootObject(body)?.let { JsonScan.boolField(it, "truncated") } ?: false

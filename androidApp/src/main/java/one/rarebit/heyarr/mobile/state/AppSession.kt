@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import one.rarebit.heyarr.mobile.heyarr.HeyarrApi
 import one.rarebit.heyarr.mobile.heyarr.McpResult
-import one.rarebit.heyarr.mobile.heyarr.QualityProfile
+import one.rarebit.heyarr.core.heyarr.QualityProfile
 import one.rarebit.heyarr.mobile.mcp.McpRefusedException
 import one.rarebit.heyarr.mobile.mcp.McpTransportException
 import one.rarebit.heyarr.mobile.settings.SettingsStore

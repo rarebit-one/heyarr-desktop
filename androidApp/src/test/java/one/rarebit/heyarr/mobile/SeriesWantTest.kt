@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile
 
-import one.rarebit.heyarr.mobile.heyarr.DesiredItem
+import one.rarebit.heyarr.core.heyarr.DesiredItem
 import one.rarebit.heyarr.mobile.heyarr.seriesWantState
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

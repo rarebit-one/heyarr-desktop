@@ -2,7 +2,7 @@ package one.rarebit.heyarr.mobile.personalstate
 
 import one.rarebit.heyarr.mobile.net.HttpResponse
 import one.rarebit.heyarr.mobile.net.HttpTransport
-import one.rarebit.heyarr.mobile.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 import java.util.Base64
 
 /**
