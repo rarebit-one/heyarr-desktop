@@ -92,7 +92,8 @@ fun DownloadsScreen(session: AppSession, state: DownloadsState, onOpen: (Route) 
                         3 -> Cell(if (w.state == "SELECTED") "handed off" else "—", muted = true)
                         4 -> Cell(w.detail ?: "", muted = true, maxLines = 2)
                         5 -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (w.workId != null) GhostButton("Open", { onOpen(Route.Detail(w.workId!!, MediaType.UNKNOWN, state.titles[w.workId], from = "Downloads", curate = true)) })
+                            val wid = w.workId
+                            if (wid != null) GhostButton("Open", { onOpen(Route.Detail(wid, MediaType.UNKNOWN, state.titles[wid], from = "Downloads", curate = true)) })
                             SecondaryButton("Search", { session.api?.let { a -> scope.launch { session.io { a.searchReleases(w.id) }.onSuccess { res -> when (res) { is McpResult.Ok -> session.toast(Toast.Kind.INFO, "Search queued"); is McpResult.Refused -> session.refused(res) } } } } }, icon = Icons.Rounded.Search, compact = true)
                         }
                     }

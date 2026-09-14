@@ -328,7 +328,10 @@ private fun DetailHero(session: AppSession, detail: WorkDetail, type: MediaType,
             kicker = cont?.let { "Continue · ${it.editionLabel ?: ""} ${it.progressLabel ?: ""}".trim() },
             primary = {
                 when {
-                    cont?.blobHash != null && type != MediaType.BOOK -> PrimaryButton("Continue", { playLocal(session, state, cont.blobHash!!, "${work.title} — ${cont.editionLabel ?: ""}", scope, assetId = cont.assetId, type = type) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
+                    cont?.blobHash != null && type != MediaType.BOOK -> PrimaryButton("Continue", {
+                        val hash = cont.blobHash ?: return@PrimaryButton
+                        playLocal(session, state, hash, "${work.title} — ${cont.editionLabel ?: ""}", scope, assetId = cont.assetId, type = type)
+                    }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
                     type == MediaType.SERIES && first != null -> PrimaryButton("Play ${first.code ?: ""}".trim(), { playLocal(session, state, first.asset.blobHash!!, Series.playTitle(work, first), scope, assetId = first.asset.id, type = type) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
                     asset == null && wants.isNotEmpty() -> PrimaryButton("Look for it", {
                         val a = session.api ?: return@PrimaryButton
@@ -654,8 +657,9 @@ private fun ArchiveBlock(session: AppSession, state: DetailState) {
                 }
                 if (item.archived && item.workId != null) SecondaryButton("Open", {
                     val a = session.api ?: return@SecondaryButton
+                    val wid = item.workId ?: return@SecondaryButton
                     scope.launch {
-                        val d = session.io { a.work(item.workId!!) }.getOrNull()
+                        val d = session.io { a.work(wid) }.getOrNull()
                         val asset = d?.primaryAsset
                         if (asset == null) session.toast(Toast.Kind.INFO, "No archived bytes held for this item yet.")
                         else session.io { session.openExternally.open(session.config.baseUrl, asset.blobHash, session.config.bearerToken.trim(), null, asset.mime ?: "text/html", item.title) }.getOrNull()?.let { session.toast(Toast.Kind.INFO, it) }

@@ -1,8 +1,8 @@
-package one.rarebit.heyarr.desktop
+package one.rarebit.heyarr.core
 
 import one.rarebit.heyarr.core.feeds.FollowedSourcesJson
 import one.rarebit.heyarr.core.mcp.SearchHitsJson
-import one.rarebit.heyarr.desktop.preview.Fixtures
+import one.rarebit.heyarr.core.testfixtures.Fixtures
 import one.rarebit.heyarr.core.state.SearchFilter
 import one.rarebit.heyarr.core.state.SearchGrouping
 import one.rarebit.heyarr.core.state.SearchRow

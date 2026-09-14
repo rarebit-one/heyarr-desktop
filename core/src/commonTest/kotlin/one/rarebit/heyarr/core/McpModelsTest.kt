@@ -1,4 +1,4 @@
-package one.rarebit.heyarr.desktop
+package one.rarebit.heyarr.core
 
 import one.rarebit.heyarr.core.heyarr.CandidateJson
 import one.rarebit.heyarr.core.heyarr.DesiredItemJson
@@ -11,7 +11,7 @@ import one.rarebit.heyarr.core.mcp.RendererJson
 import one.rarebit.heyarr.core.mcp.SatisfactionJson
 import one.rarebit.heyarr.core.mcp.SearchHitsJson
 import one.rarebit.heyarr.core.mcp.WantJson
-import one.rarebit.heyarr.desktop.preview.Fixtures
+import one.rarebit.heyarr.core.testfixtures.Fixtures
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

@@ -17,9 +17,8 @@ kotlin {
 
     sourceSets {
         val commonMain by getting {
-            dependencies {
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-            }
+            // No deps yet: the domain here is pure stdlib. kotlinx-coroutines-core comes
+            // back when HeyarrApi / the async layer moves in from :composeApp (Gate A).
         }
         val commonTest by getting {
             dependencies {
