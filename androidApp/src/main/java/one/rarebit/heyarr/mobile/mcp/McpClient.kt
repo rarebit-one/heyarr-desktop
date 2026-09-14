@@ -3,7 +3,7 @@ package one.rarebit.heyarr.mobile.mcp
 import one.rarebit.heyarr.mobile.auth.Credential
 import one.rarebit.heyarr.mobile.net.HttpTransport
 import one.rarebit.heyarr.mobile.net.JsonScan
-import one.rarebit.heyarr.mobile.net.JsonWrite
+import one.rarebit.heyarr.core.mcp.JsonWrite
 import java.io.IOException
 
 /**

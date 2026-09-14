@@ -1,4 +1,5 @@
 package one.rarebit.heyarr.mobile.net
+import one.rarebit.heyarr.core.net.JsonEscapes
 
 /**
  * The shared, dependency-free scanning primitives behind the app's hand-rolled JSON

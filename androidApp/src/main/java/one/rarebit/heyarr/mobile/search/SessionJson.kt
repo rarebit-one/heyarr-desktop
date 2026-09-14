@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.search
 
-import one.rarebit.heyarr.mobile.net.JsonEscapes
+import one.rarebit.heyarr.core.net.JsonEscapes
 
 /**
  * Dependency-free parser for heyarr's `GET /api/v1/session` response

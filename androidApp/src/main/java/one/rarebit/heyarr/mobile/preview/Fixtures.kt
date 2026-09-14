@@ -3,7 +3,7 @@ package one.rarebit.heyarr.mobile.preview
 import one.rarebit.heyarr.mobile.net.HttpResponse
 import one.rarebit.heyarr.mobile.net.HttpTransport
 import one.rarebit.heyarr.mobile.net.JsonScan
-import one.rarebit.heyarr.mobile.net.JsonWrite
+import one.rarebit.heyarr.core.mcp.JsonWrite
 
 /**
  * Canned heyarr answers — the shapes observed on a live node, trimmed — served by a

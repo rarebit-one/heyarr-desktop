@@ -5,7 +5,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import one.rarebit.heyarr.mobile.net.JsonScan
-import one.rarebit.heyarr.mobile.net.JsonWrite
+import one.rarebit.heyarr.core.mcp.JsonWrite
+import one.rarebit.heyarr.core.net.JsonArrays
 import one.rarebit.heyarr.mobile.theme.MediaType
 import java.io.File
 import java.net.URI
@@ -206,7 +207,7 @@ object ExternalParsers {
     fun openLibrary(body: String): ExternalMeta? {
         val doc = JsonScan.objectsOf(body, listOf("docs")).firstOrNull() ?: return null
         val cover = JsonScan.longField(doc, "cover_i") ?: return null
-        val sentence = JsonScan.arrayOf(doc, listOf("first_sentence"))?.let { JsonWrite.parseStrings(it).firstOrNull() }
+        val sentence = JsonScan.arrayOf(doc, listOf("first_sentence"))?.let { JsonArrays.parseStrings(it).firstOrNull() }
         return ExternalMeta(imageUrl = "https://covers.openlibrary.org/b/id/$cover-L.jpg", synopsis = sentence, source = "Open Library", sourceUrl = "https://covers.openlibrary.org/b/id/$cover.json")
     }
 

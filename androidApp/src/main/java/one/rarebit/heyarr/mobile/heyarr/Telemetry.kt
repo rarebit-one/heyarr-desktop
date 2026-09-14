@@ -1,7 +1,7 @@
 package one.rarebit.heyarr.mobile.heyarr
 
 import one.rarebit.heyarr.mobile.net.JsonScan
-import one.rarebit.heyarr.mobile.net.JsonWrite
+import one.rarebit.heyarr.core.net.JsonArrays
 
 /**
  * The node's own account of itself — the connection telemetry sheet's reads, ported
@@ -19,7 +19,7 @@ object SessionInfoJson {
             kind = JsonScan.stringField(o, "kind") ?: "unknown",
             principalId = JsonScan.stringField(o, "principal_id"),
             deviceKey = JsonScan.stringField(o, "device_key"),
-            scopes = JsonScan.arrayOf(o, listOf("scopes"))?.let { JsonWrite.parseStrings(it) } ?: emptyList(),
+            scopes = JsonScan.arrayOf(o, listOf("scopes"))?.let { JsonArrays.parseStrings(it) } ?: emptyList(),
             canWrite = JsonScan.boolField(o, "can_write") ?: false,
             managementAuthorized = JsonScan.boolField(o, "management_authorized") ?: false,
         )
@@ -33,7 +33,7 @@ object ProviderJson {
     fun list(body: String): List<ProviderInfo> = JsonScan.objectsOf(body, listOf("providers", "items")).mapNotNull { p ->
         ProviderInfo(
             name = JsonScan.stringField(p, "name") ?: return@mapNotNull null,
-            capabilities = JsonScan.arrayOf(p, listOf("capabilities"))?.let { JsonWrite.parseStrings(it) } ?: emptyList(),
+            capabilities = JsonScan.arrayOf(p, listOf("capabilities"))?.let { JsonArrays.parseStrings(it) } ?: emptyList(),
             healthy = JsonScan.boolField(p, "healthy") ?: false,
             detail = JsonScan.stringField(p, "detail"),
             version = JsonScan.stringField(p, "version"),
@@ -49,7 +49,7 @@ data class CapabilityHolder(val peerName: String, val workerId: String, val capa
 object CapabilitiesJson {
     fun parse(body: String): Capabilities {
         val root = JsonScan.rootObject(body) ?: return Capabilities(emptyList(), emptyList())
-        val available = JsonScan.arrayOf(root, listOf("available"))?.let { JsonWrite.parseStrings(it) } ?: emptyList()
+        val available = JsonScan.arrayOf(root, listOf("available"))?.let { JsonArrays.parseStrings(it) } ?: emptyList()
         val holders = JsonScan.objectsOf(root, listOf("holders")).map { h ->
             CapabilityHolder(
                 peerName = JsonScan.stringField(h, "peer_name") ?: "?",
