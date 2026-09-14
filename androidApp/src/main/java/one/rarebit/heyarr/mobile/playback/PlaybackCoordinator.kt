@@ -11,7 +11,7 @@ import kotlinx.coroutines.withContext
 import one.rarebit.heyarr.mobile.auth.Credential
 import one.rarebit.heyarr.mobile.library.Work
 import one.rarebit.heyarr.mobile.library.WorkAsset
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpTransport
 
 /**
  * A resolved item the player is showing: its stream target, a display title, the asset

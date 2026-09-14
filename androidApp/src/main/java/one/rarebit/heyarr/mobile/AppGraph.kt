@@ -8,7 +8,7 @@ import one.rarebit.heyarr.mobile.consumption.DeviceIdStore
 import one.rarebit.heyarr.mobile.consumption.PrefsDeviceIdStore
 import one.rarebit.heyarr.mobile.net.AuthHeaderSource
 import one.rarebit.heyarr.mobile.net.AuthInterceptor
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.heyarr.mobile.net.OkHttpTransport
 import one.rarebit.heyarr.mobile.playback.AudioPlayer
 import one.rarebit.heyarr.mobile.playback.SessionAudioPlayer

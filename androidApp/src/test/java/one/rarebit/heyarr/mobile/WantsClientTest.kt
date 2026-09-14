@@ -3,7 +3,7 @@ package one.rarebit.heyarr.mobile
 import one.rarebit.heyarr.mobile.acquisition.CandidatesJson
 import one.rarebit.heyarr.mobile.acquisition.WantsClient
 import one.rarebit.heyarr.mobile.auth.Credential
-import one.rarebit.heyarr.mobile.net.HttpResponse
+import one.rarebit.heyarr.core.net.HttpResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

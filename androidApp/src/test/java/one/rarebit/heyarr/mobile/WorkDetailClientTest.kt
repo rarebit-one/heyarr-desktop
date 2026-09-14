@@ -4,8 +4,8 @@ import one.rarebit.heyarr.mobile.auth.Credential
 import one.rarebit.heyarr.mobile.library.LibraryClient
 import one.rarebit.heyarr.mobile.library.WorkDetailClient
 import one.rarebit.heyarr.mobile.library.WorkPatch
-import one.rarebit.heyarr.mobile.net.HttpResponse
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpResponse
+import one.rarebit.heyarr.core.net.HttpTransport
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

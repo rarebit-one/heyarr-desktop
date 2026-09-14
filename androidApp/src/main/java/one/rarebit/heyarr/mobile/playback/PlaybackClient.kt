@@ -2,7 +2,7 @@ package one.rarebit.heyarr.mobile.playback
 
 import one.rarebit.heyarr.mobile.auth.Credential
 import one.rarebit.heyarr.mobile.library.WorkAsset
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpTransport
 
 /**
  * The playback / blob-stream seam. heyarr serves content two ways (mobile-client

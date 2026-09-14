@@ -1,7 +1,7 @@
 package one.rarebit.heyarr.mobile.library
 
 import one.rarebit.heyarr.mobile.auth.Credential
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.heyarr.mobile.net.ProblemDetail
 import java.net.URLEncoder
 
@@ -126,7 +126,7 @@ class WorkDetailClient(
     private val jsonHeaders: Map<String, String>
         get() = credential.asHeader() + ("Content-Type" to "application/json")
 
-    private fun classify(resp: one.rarebit.heyarr.mobile.net.HttpResponse, label: String): Outcome = when (resp.status) {
+    private fun classify(resp: one.rarebit.heyarr.core.net.HttpResponse, label: String): Outcome = when (resp.status) {
         in 200..299 -> Outcome.Done(resp.status, resp.body)
         403 -> Outcome.ReadOnly(READ_ONLY_HINT)
         400, 404, 409 -> Outcome.Refused(resp.status, ProblemDetail.message(resp.body, resp.status, label))

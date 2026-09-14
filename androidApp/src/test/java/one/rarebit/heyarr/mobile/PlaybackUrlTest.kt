@@ -1,8 +1,8 @@
 package one.rarebit.heyarr.mobile
 
 import one.rarebit.heyarr.mobile.auth.Credential
-import one.rarebit.heyarr.mobile.net.HttpResponse
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpResponse
+import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.heyarr.mobile.playback.PlaybackClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

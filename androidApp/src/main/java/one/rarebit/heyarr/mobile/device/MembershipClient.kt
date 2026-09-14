@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.device
 
-import one.rarebit.heyarr.mobile.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.voidbind.crypto.MiniJson
 
 /**
