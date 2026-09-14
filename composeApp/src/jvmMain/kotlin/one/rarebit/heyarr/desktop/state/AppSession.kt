@@ -242,20 +242,18 @@ class AppSession(
     fun refused(r: McpResult.Refused) = toast(Toast.Kind.REFUSED, "Refused by ${r.tool}", r.message, r.tool)
 
     /**
-     * A cast refusal, with an escape hatch. A codec/transcode refusal — the renderer
-     * declares fewer codecs than it actually decodes (a TV that under-declares DD+ over
-     * DLNA) — gets a "Cast anyway" action that retries with force_direct; [retry] performs
-     * that forced cast. Any other refusal (a screen that is off, an unreachable renderer)
-     * is shown as-is, since forcing would not help.
+     * A cast refusal, with an escape hatch. The client CANNOT reliably tell WHY a cast was
+     * refused: the MCP layer masks a tool's reason as a generic "the tool failed" (it does not
+     * leak internal detail), and the REST fallback can report a downstream error ("no renderer
+     * answered") rather than the plan's codec verdict. So offer "Cast anyway" on any cast
+     * refusal — [retry] re-casts with force_direct, which bypasses the codec plan-gate for a
+     * device that decodes more than it declares (a TV that under-declares DD+ over DLNA). If the
+     * device is genuinely off or truly cannot decode, the forced attempt simply refuses again —
+     * no loop, since the retry path shows the plain refusal.
      */
     fun castRefused(r: McpResult.Refused, deviceName: String, retry: () -> Unit) {
-        val codec = r.message.contains("transcode") || r.message.contains("does not declare") || r.message.contains("cannot serve")
-        if (codec) {
-            toast(Toast.Kind.REFUSED, "$deviceName can't play this as it is", r.message, r.tool,
-                action = ToastAction("Cast anyway") { retry() })
-        } else {
-            refused(r)
-        }
+        toast(Toast.Kind.REFUSED, "Couldn't cast to $deviceName", r.message, r.tool,
+            action = ToastAction("Cast anyway") { retry() })
     }
 
     fun toast(kind: Toast.Kind, title: String, detail: String? = null, tool: String? = null, action: ToastAction? = null) {
