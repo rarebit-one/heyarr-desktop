@@ -649,7 +649,8 @@ private fun ArchiveBlock(state: DetailState, onOpen: (Route) -> Unit) {
                     Text(item.title, style = MaterialTheme.typography.titleSmall, color = if (item.archived) Tokens.textPrimary else Tokens.textDisabled)
                     Text(listOfNotNull(item.publishedAt?.take(10), if (item.archived) "archived" else "not archived yet", item.want?.summary?.takeIf { it.isNotBlank() }).joinToString("  ·  "), style = MaterialTheme.typography.labelSmall, color = Tokens.textMuted)
                 }
-                if (item.archived && item.workId != null) SecondaryButton("Open", { onOpen(detailRoute(item.workId, MediaType.UNKNOWN, item.title, from = "Archive")) }, icon = Icons.Rounded.OpenInNew, compact = true)
+                val wid = item.workId
+                if (item.archived && wid != null) SecondaryButton("Open", { onOpen(detailRoute(wid, MediaType.UNKNOWN, item.title, from = "Archive")) }, icon = Icons.Rounded.OpenInNew, compact = true)
             }
         }
     }
