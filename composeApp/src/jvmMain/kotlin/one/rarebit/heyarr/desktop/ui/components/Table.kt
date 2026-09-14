@@ -39,7 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import one.rarebit.heyarr.desktop.theme.RubikFamily
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.ui.theme.Tokens
 
 /** One column of a [DataTable]: a header caption and a share of the width (or a fixed width). */
 data class Column(val title: String, val weight: Float = 1f, val width: Dp? = null, val alignEnd: Boolean = false)

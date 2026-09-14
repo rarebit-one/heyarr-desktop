@@ -1,5 +1,7 @@
 package one.rarebit.heyarr.desktop.state
 
+import one.rarebit.heyarr.core.state.*
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -7,7 +9,7 @@ import one.rarebit.heyarr.desktop.heyarr.HeyarrApi
 import one.rarebit.heyarr.desktop.heyarr.PlaybackTarget
 import one.rarebit.heyarr.desktop.library.Episode
 import one.rarebit.heyarr.desktop.playback.EmbeddedPlayer
-import one.rarebit.heyarr.desktop.theme.MediaType
+import one.rarebit.heyarr.core.theme.MediaType
 import one.rarebit.heyarr.desktop.ui.Route
 
 /**

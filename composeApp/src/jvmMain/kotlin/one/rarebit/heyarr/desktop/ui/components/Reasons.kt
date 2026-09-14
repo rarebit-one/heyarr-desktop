@@ -25,9 +25,9 @@ import androidx.compose.ui.unit.sp
 import one.rarebit.heyarr.desktop.theme.RubikFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import one.rarebit.heyarr.desktop.mcp.Reason
+import one.rarebit.heyarr.core.mcp.Reason
 import one.rarebit.heyarr.desktop.theme.LocalMediaTheme
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.ui.theme.Tokens
 
 /** The colour a verdict word gets: pass/bonus in the accent, fail red, miss muted, undetermined gold. */
 @Composable

@@ -33,10 +33,10 @@ import one.rarebit.heyarr.desktop.library.Variants
 import one.rarebit.heyarr.desktop.library.Work
 import androidx.compose.runtime.remember
 import one.rarebit.heyarr.desktop.state.AppSession
-import one.rarebit.heyarr.desktop.state.LibraryStatus
+import one.rarebit.heyarr.core.state.LibraryStatus
 import one.rarebit.heyarr.desktop.theme.MediaScope
-import one.rarebit.heyarr.desktop.theme.MediaType
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.core.theme.MediaType
+import one.rarebit.heyarr.ui.theme.Tokens
 import one.rarebit.heyarr.desktop.ui.Route
 import one.rarebit.heyarr.desktop.ui.components.EmptyState
 import one.rarebit.heyarr.desktop.ui.components.ErrorState

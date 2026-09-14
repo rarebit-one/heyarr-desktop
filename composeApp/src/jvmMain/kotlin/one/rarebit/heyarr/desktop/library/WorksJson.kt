@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.desktop.library
 
-import one.rarebit.heyarr.desktop.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * A minimal, dependency-free parser for heyarr's `GET /api/v1/works` list body and the

@@ -4,7 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import one.rarebit.heyarr.desktop.theme.MediaType
+import one.rarebit.heyarr.core.theme.MediaType
 
 /** Where the app can be. [section] groups a detail under the screen it was opened from for nav highlighting. */
 sealed interface Route {

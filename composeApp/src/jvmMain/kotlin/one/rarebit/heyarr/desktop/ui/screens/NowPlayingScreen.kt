@@ -33,11 +33,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import one.rarebit.heyarr.desktop.heyarr.McpResult
-import one.rarebit.heyarr.desktop.mcp.PlaybackStatus
-import one.rarebit.heyarr.desktop.mcp.Renderer
+import one.rarebit.heyarr.core.mcp.PlaybackStatus
+import one.rarebit.heyarr.core.mcp.Renderer
 import one.rarebit.heyarr.desktop.state.AppSession
 import one.rarebit.heyarr.desktop.theme.LocalMediaTheme
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.ui.theme.Tokens
 import one.rarebit.heyarr.desktop.ui.components.EmptyState
 import one.rarebit.heyarr.desktop.ui.components.ErrorState
 import one.rarebit.heyarr.desktop.ui.components.FilterChip

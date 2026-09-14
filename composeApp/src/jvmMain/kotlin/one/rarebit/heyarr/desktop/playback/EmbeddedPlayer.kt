@@ -3,8 +3,8 @@ package one.rarebit.heyarr.desktop.playback
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import one.rarebit.heyarr.desktop.mcp.JsonWrite
-import one.rarebit.heyarr.desktop.net.JsonScan
+import one.rarebit.heyarr.core.mcp.JsonWrite
+import one.rarebit.heyarr.core.net.JsonScan
 import com.sun.jna.Pointer
 import java.io.File
 import java.io.IOException

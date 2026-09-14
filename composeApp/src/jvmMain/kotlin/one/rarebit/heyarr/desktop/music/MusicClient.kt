@@ -1,11 +1,11 @@
 package one.rarebit.heyarr.desktop.music
 
-import one.rarebit.heyarr.desktop.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.heyarr.desktop.catalog.Grouping
 import one.rarebit.heyarr.desktop.catalog.GroupingJson
 import one.rarebit.heyarr.desktop.library.Work
 import one.rarebit.heyarr.desktop.library.WorksJson
-import one.rarebit.heyarr.desktop.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpTransport
 import java.net.URLEncoder
 
 /**

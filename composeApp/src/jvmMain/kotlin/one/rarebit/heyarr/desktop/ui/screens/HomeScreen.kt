@@ -23,20 +23,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import one.rarebit.heyarr.desktop.feeds.FollowedSource
-import one.rarebit.heyarr.desktop.heyarr.ContinueEntry
-import one.rarebit.heyarr.desktop.theme.CardAspect as Aspect
+import one.rarebit.heyarr.core.feeds.FollowedSource
+import one.rarebit.heyarr.core.heyarr.ContinueEntry
+import one.rarebit.heyarr.ui.theme.CardAspect as Aspect
 import one.rarebit.heyarr.desktop.library.Work
-import one.rarebit.heyarr.desktop.mcp.SearchHit
-import one.rarebit.heyarr.desktop.mcp.Want
+import one.rarebit.heyarr.core.mcp.SearchHit
+import one.rarebit.heyarr.core.mcp.Want
 import one.rarebit.heyarr.desktop.state.AppSession
-import one.rarebit.heyarr.desktop.state.LibraryStatus
+import one.rarebit.heyarr.core.state.LibraryStatus
 import one.rarebit.heyarr.desktop.ui.components.rememberCover
-import one.rarebit.heyarr.desktop.theme.CardAspect
+import one.rarebit.heyarr.ui.theme.CardAspect
 import one.rarebit.heyarr.desktop.theme.MediaScope
-import one.rarebit.heyarr.desktop.theme.MediaThemes
-import one.rarebit.heyarr.desktop.theme.MediaType
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.ui.theme.MediaThemes
+import one.rarebit.heyarr.core.theme.MediaType
+import one.rarebit.heyarr.ui.theme.Tokens
 import one.rarebit.heyarr.desktop.ui.Route
 import one.rarebit.heyarr.desktop.ui.components.GhostButton
 import one.rarebit.heyarr.desktop.ui.components.Hero

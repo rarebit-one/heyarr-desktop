@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.desktop.login
 
-import one.rarebit.heyarr.desktop.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 
 /**
  * The login seam. The app depends only on [LoginProvider]; how a [Credential] is

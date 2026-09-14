@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 import one.rarebit.heyarr.desktop.heyarr.HeyarrApi
 import one.rarebit.heyarr.desktop.heyarr.PlaybackTarget
 import one.rarebit.heyarr.desktop.heyarr.McpResult
-import one.rarebit.heyarr.desktop.net.HttpTransport
+import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.heyarr.desktop.open.BlobDownloader
 import one.rarebit.heyarr.desktop.open.ExternalOpener
 import one.rarebit.heyarr.desktop.open.JdkBlobDownloader
@@ -58,9 +58,9 @@ import one.rarebit.heyarr.desktop.state.SearchController
 import one.rarebit.heyarr.desktop.state.Toast
 import one.rarebit.heyarr.desktop.theme.HeyarrTheme
 import one.rarebit.heyarr.desktop.theme.LocalAppearance
-import one.rarebit.heyarr.desktop.theme.MediaThemes
-import one.rarebit.heyarr.desktop.theme.MediaType
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.ui.theme.MediaThemes
+import one.rarebit.heyarr.core.theme.MediaType
+import one.rarebit.heyarr.ui.theme.Tokens
 import one.rarebit.heyarr.desktop.ui.components.FilterChip
 import one.rarebit.heyarr.desktop.ui.components.GhostButton
 import one.rarebit.heyarr.desktop.ui.components.OfflineBanner

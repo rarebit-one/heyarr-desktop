@@ -57,8 +57,8 @@ import androidx.compose.ui.unit.dp
 import one.rarebit.heyarr.desktop.state.Toast
 import one.rarebit.heyarr.desktop.theme.LocalAppearance
 import one.rarebit.heyarr.desktop.theme.LocalMediaTheme
-import one.rarebit.heyarr.desktop.theme.MediaType
-import one.rarebit.heyarr.desktop.theme.Tokens
+import one.rarebit.heyarr.core.theme.MediaType
+import one.rarebit.heyarr.ui.theme.Tokens
 
 /**
  * The small reusable set every screen is built from. Each piece reads the accent in
@@ -234,7 +234,7 @@ fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: 
 /** The media-type badge on a card or row — always in that type's own accent, whatever the surrounding scope. */
 @Composable
 fun MediaBadge(type: MediaType, modifier: Modifier = Modifier) {
-    val theme = one.rarebit.heyarr.desktop.theme.MediaThemes.of(type)
+    val theme = one.rarebit.heyarr.ui.theme.MediaThemes.of(type)
     Box(
         modifier.background(theme.tint(0.22f), RoundedCornerShape(6.dp)).border(Tokens.hairline, theme.accent.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
             .padding(horizontal = 6.dp, vertical = 2.dp),

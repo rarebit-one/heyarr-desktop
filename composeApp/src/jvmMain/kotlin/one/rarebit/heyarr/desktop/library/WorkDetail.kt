@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.desktop.library
 
-import one.rarebit.heyarr.desktop.net.JsonScan
+import one.rarebit.heyarr.core.net.JsonScan
 
 /**
  * The one playable file a work-detail read hands back — heyarr-core `PrimaryAssetRef`

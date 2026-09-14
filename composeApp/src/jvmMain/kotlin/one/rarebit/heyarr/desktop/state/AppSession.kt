@@ -1,5 +1,7 @@
 package one.rarebit.heyarr.desktop.state
 
+import one.rarebit.heyarr.core.state.*
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -14,13 +16,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import one.rarebit.heyarr.desktop.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.heyarr.desktop.heyarr.HeyarrApi
 import one.rarebit.heyarr.desktop.heyarr.McpResult
-import one.rarebit.heyarr.desktop.heyarr.QualityProfile
-import one.rarebit.heyarr.desktop.mcp.McpRefusedException
-import one.rarebit.heyarr.desktop.mcp.McpTransportException
-import one.rarebit.heyarr.desktop.net.HttpTransport
+import one.rarebit.heyarr.core.heyarr.QualityProfile
+import one.rarebit.heyarr.core.mcp.McpRefusedException
+import one.rarebit.heyarr.core.mcp.McpTransportException
+import one.rarebit.heyarr.core.net.HttpTransport
 import one.rarebit.heyarr.desktop.open.OpenExternally
 import one.rarebit.heyarr.desktop.playback.Player
 import one.rarebit.heyarr.desktop.settings.DesktopConfig
