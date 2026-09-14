@@ -83,4 +83,17 @@ if [[ -t 0 && -t 1 ]]; then EXEC_CMD+=(-it); elif [[ -t 0 ]]; then EXEC_CMD+=(-i
 # Optional live-node credentials for the smoke test / screenshot runs.
 [[ -n "${HEYARR_URL:-}" ]] && EXEC_CMD+=(-e "HEYARR_URL=${HEYARR_URL}")
 [[ -n "${HEYARR_TOKEN:-}" ]] && EXEC_CMD+=(-e "HEYARR_TOKEN=${HEYARR_TOKEN}")
+# GitHub Packages creds so Gradle inside the container can resolve the private
+# one.rarebit.voidbind:voidbind-client (pulled in transitively via :core since the
+# device-auth work). settings.gradle.kts reads GITHUB_ACTOR/GITHUB_TOKEN as a fallback
+# to gpr.user/gpr.token, so source them from the container host's gradle.properties —
+# nothing is committed or shipped over the wire. Env already present wins.
+if [[ -z "${GITHUB_TOKEN:-}" && -f "$HOME/.gradle/gradle.properties" ]]; then
+  GPR_USER=$(sed -n 's/^gpr\.user=//p' "$HOME/.gradle/gradle.properties" | head -1)
+  GPR_TOKEN=$(sed -n 's/^gpr\.token=//p' "$HOME/.gradle/gradle.properties" | head -1)
+  [[ -n "$GPR_USER" ]] && GITHUB_ACTOR="${GITHUB_ACTOR:-$GPR_USER}"
+  [[ -n "$GPR_TOKEN" ]] && GITHUB_TOKEN="$GPR_TOKEN"
+fi
+[[ -n "${GITHUB_ACTOR:-}" ]] && EXEC_CMD+=(-e "GITHUB_ACTOR=${GITHUB_ACTOR}")
+[[ -n "${GITHUB_TOKEN:-}" ]] && EXEC_CMD+=(-e "GITHUB_TOKEN=${GITHUB_TOKEN}")
 exec "${EXEC_CMD[@]}" "$CONTAINER" "$@"
