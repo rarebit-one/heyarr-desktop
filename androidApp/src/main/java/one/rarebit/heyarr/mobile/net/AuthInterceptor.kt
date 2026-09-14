@@ -7,7 +7,7 @@ import java.net.URI
 /**
  * Stamps the live credential onto requests that go to OUR node's `/api/v1` and carry
  * no `Authorization` of their own — posters and range reads issued by the image
- * loader and the media data source, which never see a [one.rarebit.heyarr.mobile.auth.Credential].
+ * loader and the media data source, which never see a [one.rarebit.heyarr.core.auth.Credential].
  *
  * Deliberately narrow: same scheme, host and port as the configured base URL, and a
  * path under `/api/v1/`. A poster URL a discovery provider hands back (another host)

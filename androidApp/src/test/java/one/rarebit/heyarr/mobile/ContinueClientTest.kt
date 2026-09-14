@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile
 
-import one.rarebit.heyarr.mobile.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.heyarr.mobile.catalog.ContinueClient
 import one.rarebit.heyarr.mobile.catalog.ContinueEntry
 import one.rarebit.heyarr.core.net.HttpResponse

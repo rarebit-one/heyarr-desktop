@@ -6,7 +6,7 @@ import one.rarebit.heyarr.core.heyarr.QualityProfile
 import one.rarebit.heyarr.core.heyarr.DesiredItemJson
 import one.rarebit.heyarr.core.heyarr.DesiredItem
 
-import one.rarebit.heyarr.mobile.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.heyarr.mobile.catalog.ContinueClient
 import one.rarebit.heyarr.mobile.catalog.ContinueEntry
 import one.rarebit.heyarr.mobile.library.LibraryClient

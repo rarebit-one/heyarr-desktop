@@ -48,7 +48,7 @@ class HeyarrApp : Application(), ImageLoaderFactory {
 
     /** The signed-in credential, if any, offered to the admin-registration lane of `/enrol`. */
     @Volatile
-    var credentialProvider: () -> one.rarebit.heyarr.mobile.auth.Credential? = { null }
+    var credentialProvider: () -> one.rarebit.heyarr.core.auth.Credential? = { null }
 
     /** The signed-in ViewModel's progress reporter, for the reader activity (a separate task). */
     @Volatile

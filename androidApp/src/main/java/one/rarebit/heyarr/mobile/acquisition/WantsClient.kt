@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile.acquisition
 
-import one.rarebit.heyarr.mobile.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.heyarr.mobile.library.Want
 import one.rarebit.heyarr.mobile.library.WorkDetailJson
 import one.rarebit.heyarr.core.net.HttpTransport

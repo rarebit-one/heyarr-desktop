@@ -32,8 +32,18 @@ kotlin {
 
     sourceSets {
         val commonMain by getting {
-            // No deps yet: the domain here is pure stdlib. kotlinx-coroutines-core comes
-            // back when HeyarrApi / the async layer moves in from :composeApp (Gate A).
+            // kotlinx-coroutines-core comes back when HeyarrApi / the async layer moves in
+            // from :composeApp (Gate A).
+            dependencies {
+                // Gate B: the shared device-auth brain. voidbind-client's device-credential
+                // domain (DeviceCredential, DeviceAuthPolicy, DevicePairing, WebLoginClient …)
+                // lives in voidbind's OWN commonMain, so :core consumes it in common code;
+                // the platform `DeviceKeyStore` actuals ship in voidbind's jvm/android
+                // variants and resolve per target. This puts voidbind on :core's classpath,
+                // so :composeApp (desktop) now pulls it transitively too → desktop CI needs a
+                // read:packages token (see .github/workflows/desktop.yml).
+                implementation("one.rarebit.voidbind:voidbind-client:0.7.0")
+            }
         }
         val commonTest by getting {
             dependencies {

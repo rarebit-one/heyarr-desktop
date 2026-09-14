@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile
 
-import one.rarebit.heyarr.mobile.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.heyarr.mobile.playback.PlaybackDiagnostics
 import one.rarebit.heyarr.mobile.playback.PlaybackDiagnostics.TrackGroup
 import one.rarebit.heyarr.mobile.playback.PlaybackTarget

@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile
 
-import one.rarebit.heyarr.mobile.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.heyarr.core.heyarr.CandidateJson
 import one.rarebit.heyarr.core.heyarr.DesiredItemJson
 import one.rarebit.heyarr.mobile.heyarr.HeyarrApi

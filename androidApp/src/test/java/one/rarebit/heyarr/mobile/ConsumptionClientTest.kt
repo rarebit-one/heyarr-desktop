@@ -1,6 +1,6 @@
 package one.rarebit.heyarr.mobile
 
-import one.rarebit.heyarr.mobile.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.heyarr.mobile.consumption.ConsumptionClient
 import one.rarebit.heyarr.mobile.consumption.ConsumptionReporter
 import one.rarebit.heyarr.mobile.consumption.InMemoryDeviceIdStore

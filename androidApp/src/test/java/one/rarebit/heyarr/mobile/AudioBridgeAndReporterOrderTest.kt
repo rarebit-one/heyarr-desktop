@@ -6,7 +6,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
-import one.rarebit.heyarr.mobile.auth.Credential
+import one.rarebit.heyarr.core.auth.Credential
 import one.rarebit.heyarr.mobile.consumption.ConsumptionClient
 import one.rarebit.heyarr.mobile.consumption.ConsumptionReporter
 import one.rarebit.heyarr.mobile.consumption.InMemoryDeviceIdStore
