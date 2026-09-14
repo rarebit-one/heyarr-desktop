@@ -25,6 +25,13 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Installs the Android SDK and exports ANDROID_HOME, which switches ON the android
+      # target in :core / :ui (they register it only when an SDK is present — see their
+      # build scripts). Without this step the build stays JVM-only, exactly like a
+      # desktop dev box with no SDK. Matches heyarr-mobile's known-green setup.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 

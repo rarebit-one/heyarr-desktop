@@ -1,6 +1,19 @@
+import com.android.build.gradle.LibraryExtension
+
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
 }
+
+// Register the android target only when an SDK is actually available (CI, or a dev box
+// with one). Applying `com.android.library` unconditionally makes AGP demand an SDK at
+// CONFIGURATION time, which would break plain JVM/desktop builds on an SDK-less machine.
+// Detection: ANDROID_HOME / ANDROID_SDK_ROOT env, or a `sdk.dir` line in local.properties.
+val hasAndroidSdk =
+    System.getenv("ANDROID_HOME") != null ||
+    System.getenv("ANDROID_SDK_ROOT") != null ||
+    rootProject.file("local.properties").takeIf { it.exists() }?.readText()?.contains("sdk.dir") == true
+
+if (hasAndroidSdk) apply(plugin = "com.android.library")
 
 kotlin {
     // The shared, PURE domain module: the hand-rolled JSON codec, the HttpTransport seam,
@@ -8,10 +21,12 @@ kotlin {
     // the pure MediaType enum. NO Compose, NO platform SDK — so its tests run as fast
     // `commonTest` without a UI or Android harness.
     //
-    // Single JVM target for now (desktop). When heyarr-mobile folds in, `androidTarget()`
-    // (and later `iosX64()` …) get added HERE and the code above is already in commonMain,
-    // so that is a source-set add, not a rewrite.
+    // Targets: JVM (desktop) always; Android when an SDK is present (see `hasAndroidSdk`).
+    // The code all lives in commonMain, so adding a target is a source-set add, not a
+    // rewrite. `iosX64()` … arrive the same way later.
     jvm()
+
+    if (hasAndroidSdk) androidTarget()
 
     jvmToolchain(17)
 
@@ -24,6 +39,20 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
             }
+        }
+    }
+}
+
+if (hasAndroidSdk) {
+    extensions.configure<LibraryExtension>("android") {
+        namespace = "one.rarebit.heyarr.core"
+        compileSdk = 35
+        defaultConfig {
+            minSdk = 33
+        }
+        compileOptions {
+            sourceCompatibility = JavaVersion.VERSION_17
+            targetCompatibility = JavaVersion.VERSION_17
         }
     }
 }
