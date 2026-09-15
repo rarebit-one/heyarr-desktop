@@ -11,6 +11,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import one.rarebit.heyarr.core.auth.Credential
+import one.rarebit.heyarr.core.discovery.DiscoveredServer
+import one.rarebit.heyarr.core.discovery.DiscoverySource
+import one.rarebit.heyarr.core.discovery.MdnsResolver
+import one.rarebit.heyarr.core.discovery.NoMdnsResolver
+import one.rarebit.heyarr.core.discovery.NodeDiscovery
 import one.rarebit.heyarr.mobile.device.DeviceKeyInfo
 import one.rarebit.heyarr.mobile.device.DeviceKeyring
 import one.rarebit.heyarr.mobile.device.EnrolClient
@@ -95,6 +100,12 @@ class AppViewModel internal constructor(
     /** The device-side personal-state role map (SharedPreferences on the phone; in-memory in tests). */
     private val spaceRegistry: one.rarebit.heyarr.mobile.personalstate.SpaceRegistry =
         one.rarebit.heyarr.mobile.personalstate.InMemorySpaceRegistry(),
+    /**
+     * The LAN mDNS browser for auto-discovery (`NsdMdnsResolver` on the phone, the
+     * no-op default in tests/previews). Feeds `:core`'s [NodeDiscovery] fallback chain
+     * (mDNS → split-horizon DNS → the saved/default node).
+     */
+    private val mdns: MdnsResolver = NoMdnsResolver,
 ) : ViewModel() {
 
     /**
@@ -252,9 +263,66 @@ class AppViewModel internal constructor(
     /**
      * The credential established by QR login (a Bearer session, later a device cert),
      * or null before sign-in. Exposed so the search/acquire/following features can be
-     * driven with the same authenticated identity that browses the library.
+     * driven with the same authenticated identity that browses the library, and so the
+     * poster/range-read header source sends NOTHING for a guest (null → no header).
      */
     fun credentialOrNull(): Credential? = credential
+
+    /**
+     * The credential the client presents right now — never null. When nothing is
+     * enrolled/signed in this is [Credential.Guest]: it sends NO `Authorization` header,
+     * so heyarr's trusted-network guest path applies (browse/play/subtitle). Guest is the
+     * new default in front of the QR/device "Sign in to save" upgrade. The shell keys its
+     * session on this, so adopting a real credential rebuilds it enrolled.
+     */
+    fun effectiveCredential(): Credential = credential ?: Credential.Guest
+
+    /** True while the phone is browsing as an anonymous guest (no login / no enrolment). */
+    val isGuest: Boolean get() = credential == null
+
+    // ── auto-discovery (mDNS → split-horizon DNS → saved/default node) ─────────────
+
+    private val discovery = NodeDiscovery(mdns)
+
+    /** A node discovered on THIS network, applied for the session when the user set no override. */
+    @Volatile
+    private var discoveredBaseUrl: String? = null
+
+    /** Resolve the server to default to, using the current effective URL as the manual fallback. Off `Dispatchers.IO`. */
+    suspend fun discoverServer(): DiscoveredServer =
+        withContext(Dispatchers.IO) { discovery.discover(config.baseUrl) }
+
+    /**
+     * On launch, before any node was hand-picked: if an `_heyarr._tcp` advertiser is
+     * actually on this network, browse against IT instead of the build default. Only mDNS
+     * (a node truly on THIS LAN) auto-applies; the split-horizon DNS name is already the
+     * build default, and a user override is never overridden. No sign-out — a guest holds
+     * nothing to invalidate; the guest library simply reloads against the found node.
+     */
+    fun autoDiscover() {
+        if (settings.baseUrlOverride != null || credential != null) return
+        viewModelScope.launch {
+            val found = runCatching { discoverServer() }.getOrNull() ?: return@launch
+            if (found.source == DiscoverySource.MDNS && found.baseUrl != _config.value.baseUrl) {
+                discoveredBaseUrl = found.baseUrl
+                _config.value = resolveConfig()
+                if (credential == null) startGuestBrowsing()
+            }
+        }
+    }
+
+    /**
+     * The Settings "Discover" button: run the chain now and, when it names a node (mDNS or
+     * the DNS fallback), save it as the connection so it sticks. [onResult] reports what was
+     * found so the screen can toast it.
+     */
+    fun discoverAndSave(onResult: (DiscoveredServer) -> Unit = {}) {
+        viewModelScope.launch {
+            val found = runCatching { discoverServer() }.getOrNull() ?: return@launch
+            if (found.source != DiscoverySource.MANUAL) updateSettings(found.baseUrl, config.defaultQualityProfile)
+            onResult(found)
+        }
+    }
 
     /**
      * The `Authorization` value in force right now, for fetches that go around the API
@@ -264,8 +332,10 @@ class AppViewModel internal constructor(
      */
     fun liveAuthorizationHeader(): String? = deviceCredential?.headerValue() ?: credential?.headerValue()
 
+    // A user-saved override always wins; otherwise a node auto-discovered on this LAN
+    // (mDNS) is preferred over the build default so a guest lands on the right node.
     private fun resolveConfig(): HeyarrConfig =
-        HeyarrConfig.resolve(settings.baseUrlOverride, settings.qualityProfileOverride)
+        HeyarrConfig.resolve(settings.baseUrlOverride ?: discoveredBaseUrl, settings.qualityProfileOverride)
 
     /**
      * Persist new overrides (a value equal to the build default is stored as "no
@@ -292,7 +362,7 @@ class AppViewModel internal constructor(
         if (baseChanged) signOut()
     }
 
-    /** Drop the session and return to the login screen. */
+    /** Drop the credential and fall back to browsing as a guest (the new default), not a login wall. */
     fun signOut() {
         credential = null
         deviceCredential = null
@@ -300,6 +370,19 @@ class AppViewModel internal constructor(
         playback.stop()
         _libraryState.value = LibraryUiState.Loading
         _loginState.value = LoginUiState.Idle
+        startGuestBrowsing()
+    }
+
+    /**
+     * Browse as an anonymous guest: no credential ([Credential.Guest] sends no header, so
+     * the node's trusted-network guest path applies), load the library and read the guest
+     * session so the shell has content before any login. A no-op once a real credential is
+     * held. This is what makes guest the default on a trusted network.
+     */
+    fun startGuestBrowsing() {
+        if (credential != null) return
+        loadSessionAuthority()
+        loadLibrary()
     }
 
     fun signIn() {
@@ -327,9 +410,9 @@ class AppViewModel internal constructor(
         }
     }
 
-    /** Introspect the session (`GET /api/v1/session`) for the signed-in / read-only banner. */
+    /** Introspect the session (`GET /api/v1/session`) for the signed-in / guest / read-only banner. */
     fun loadSessionAuthority() {
-        val cred = credential ?: return
+        val cred = effectiveCredential()
         viewModelScope.launch {
             val next = withContext(Dispatchers.IO) {
                 runCatching { SessionClient(transport, config.baseUrl, cred).authority() }.getOrNull()
@@ -439,7 +522,9 @@ class AppViewModel internal constructor(
             result.onSuccess { info ->
                 _deviceInfo.value = info
                 when {
-                    info == null -> _enrolState.value = EnrolUiState.Unprovisioned
+                    // Not enrolled → browse as a guest straight away (the default); the QR/
+                    // device flow is the optional "Sign in to save" upgrade on top.
+                    info == null -> { _enrolState.value = EnrolUiState.Unprovisioned; startGuestBrowsing() }
                     info.certToken != null -> adoptDevice(ring, info.certToken)
                     else -> {
                         _enrolState.value = EnrolUiState.Ready(info)
@@ -447,10 +532,13 @@ class AppViewModel internal constructor(
                         // (a recreation, or a restart reporting an interrupted one) wins.
                         if (pairing.state.value !is PairingState.Idle) reflectPairing(pairing.state.value)
                         continueParkedInvite()
+                        startGuestBrowsing()
                     }
                 }
             }.onFailure {
+                // A key-store hiccup still lets the phone browse as a guest.
                 _enrolState.value = EnrolUiState.Error(null, "device key unavailable: ${it.message}")
+                startGuestBrowsing()
             }
         }
     }
@@ -702,7 +790,8 @@ class AppViewModel internal constructor(
     fun refreshLibrary() = loadLibrary(keepShowing = true)
 
     private fun loadLibrary(keepShowing: Boolean = false) {
-        val cred = credential ?: return
+        // Guest-as-default: browse with Credential.Guest when nothing is enrolled.
+        val cred = effectiveCredential()
         if (!keepShowing || _libraryState.value !is LibraryUiState.Loaded) _libraryState.value = LibraryUiState.Loading
         _libraryRefreshing.value = true
         viewModelScope.launch {

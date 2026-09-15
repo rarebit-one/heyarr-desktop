@@ -6,9 +6,11 @@ import kotlinx.coroutines.CoroutineScope
 import okhttp3.OkHttpClient
 import one.rarebit.heyarr.mobile.consumption.DeviceIdStore
 import one.rarebit.heyarr.mobile.consumption.PrefsDeviceIdStore
+import one.rarebit.heyarr.core.discovery.MdnsResolver
 import one.rarebit.heyarr.mobile.net.AuthHeaderSource
 import one.rarebit.heyarr.mobile.net.AuthInterceptor
 import one.rarebit.heyarr.core.net.HttpTransport
+import one.rarebit.heyarr.mobile.net.NsdMdnsResolver
 import one.rarebit.heyarr.mobile.net.OkHttpTransport
 import one.rarebit.heyarr.mobile.playback.AudioPlayer
 import one.rarebit.heyarr.mobile.playback.SessionAudioPlayer
@@ -62,6 +64,9 @@ class AppGraph(app: Application, scope: CoroutineScope) {
 
     /** The raw transport over the shared client; the ViewModel wraps it for Device auth. */
     val rawTransport: HttpTransport = OkHttpTransport(okHttp)
+
+    /** LAN mDNS browser (NsdManager) for auto-discovery; feeds `:core`'s NodeDiscovery chain. */
+    val mdns: MdnsResolver = NsdMdnsResolver(app)
 
     /**
      * The audio queue, behind the seam: a MediaController bound to PlaybackService, so

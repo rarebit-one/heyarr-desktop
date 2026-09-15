@@ -151,6 +151,7 @@ class MainActivity : FragmentActivity() {
                                 rawTransport = app.graph.rawTransport,
                                 deviceIds = app.graph.deviceIds,
                                 spaceRegistry = app.graph.spaceRegistry,
+                                mdns = app.graph.mdns,
                             )
                         }
                     },
@@ -162,6 +163,9 @@ class MainActivity : FragmentActivity() {
                     // up the live credential here, without ever holding it themselves.
                     app.graph.authHeader.provider = { vm.liveAuthorizationHeader() }
                     vm.attachDevice(keyring)
+                    // Auto-discovery: if an `_heyarr._tcp` node is on this LAN, browse against
+                    // it (guest-as-default lands on the right node with no typing).
+                    vm.autoDiscover()
                     // What this phone can decode, for the playback planner (#432).
                     vm.playback.capabilities = MediaCodecCapabilities.probe(appContext)
                     vm.attachAudio(app.graph.audio)
@@ -179,6 +183,9 @@ class MainActivity : FragmentActivity() {
                 val config by vm.configState.collectAsStateWithLifecycle()
                 var showSettings by rememberSaveable { mutableStateOf(false) }
                 var showEnrol by rememberSaveable { mutableStateOf(false) }
+                // The "Sign in to save" upgrade: guests browse in the shell by default; this
+                // flag raises the QR/device sign-in over it when a gated affordance is tapped.
+                var showLogin by rememberSaveable { mutableStateOf(false) }
                 val parkedInvite by vm.parkedInvite.collectAsStateWithLifecycle()
                 val context = LocalContext.current
 
@@ -202,9 +209,9 @@ class MainActivity : FragmentActivity() {
                     focusDevice = link.seq
                 }
                 // A registered admission signs the phone in by itself (EnrolAdvance): drop the
-                // enrol frame and the deep-link focus so the shell opens on Home, not Device.
+                // enrol/login frames and the deep-link focus so the shell opens on Home, not Device.
                 LaunchedEffect(loginState is LoginUiState.Approved) {
-                    if (loginState is LoginUiState.Approved) { showEnrol = false; focusDevice = 0 }
+                    if (loginState is LoginUiState.Approved) { showEnrol = false; showLogin = false; focusDevice = 0 }
                 }
 
                 Box(Modifier.fillMaxSize().background(Tokens.bgBase)) {
@@ -219,7 +226,22 @@ class MainActivity : FragmentActivity() {
                                 GhostButton("Close", { showSettings = false })
                             }
                         }
-                        loginState is LoginUiState.Approved -> HeyarrNavHost(vm = vm, graph = app.graph, focusDevice = focusDevice)
+                        // The "Sign in to save" upgrade raised over the guest shell.
+                        showLogin && loginState !is LoginUiState.Approved -> {
+                            BackHandler { showLogin = false }
+                            PreLoginScreen(subtitle = config.baseUrl, onSettings = { showSettings = true }) {
+                                LoginScreen(
+                                    state = loginState,
+                                    onSignIn = vm::signIn,
+                                    onApproveOnThisPhone = if (voidbindInstalled) {
+                                        { tuple -> HandoffLauncher.open(context, VoidbindHandoff.loginUri(tuple)) }
+                                    } else null,
+                                    onEnrolDevice = { showLogin = false; showEnrol = true },
+                                    modifier = Modifier,
+                                )
+                                GhostButton("Keep browsing as guest", { showLogin = false })
+                            }
+                        }
                         showEnrol -> {
                             // Enrolment needs no session: pairing runs over the relay, and an enrolled
                             // phone then signs in with its cert instead of a QR login.
@@ -241,19 +263,9 @@ class MainActivity : FragmentActivity() {
                                 )
                             }
                         }
-                        else -> PreLoginScreen(subtitle = config.baseUrl, onSettings = { showSettings = true }) {
-                            LoginScreen(
-                                state = loginState,
-                                onSignIn = vm::signIn,
-                                // Same-phone approval: hand the tuple to the Voidbind authenticator;
-                                // the RP is still polled for the outcome.
-                                onApproveOnThisPhone = if (voidbindInstalled) {
-                                    { tuple -> HandoffLauncher.open(context, VoidbindHandoff.loginUri(tuple)) }
-                                } else null,
-                                onEnrolDevice = { showEnrol = true },
-                                modifier = Modifier,
-                            )
-                        }
+                        // Guest-as-default: the browsing shell is what the app opens on, whether
+                        // signed in or browsing anonymously. "Sign in to save" raises showLogin.
+                        else -> HeyarrNavHost(vm = vm, graph = app.graph, focusDevice = focusDevice, onSignInToSave = { showLogin = true })
                     }
                 }
             }
