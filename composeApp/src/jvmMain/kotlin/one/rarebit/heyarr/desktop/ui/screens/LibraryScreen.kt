@@ -131,7 +131,7 @@ fun LibraryScreen(session: AppSession, state: LibraryState, onOpen: (Route) -> U
                 items(filtered, key = { it.id }) { w ->
                     val type = MediaType.from(w.kind)
                     val cover by rememberCover(session, type, w.title, w.artworkPath, w.year, w.artist ?: w.author)
-                    MediaCard(w.title, type, onOpen = { onOpen(Route.Detail(w.id, type, w.title, from = "Library")) }, subtitle = w.artist ?: w.author, meta = listOf(w.year?.toString()), artwork = cover.bitmap, status = session.index.statusOf(w.id), onWant = { onWant(w.id, w.title) }, width = Tokens.posterWidth)
+                    MediaCard(w.title, type, onOpen = { onOpen(Route.Detail(w.id, type, w.title, from = "Library")) }, subtitle = w.artist ?: w.author, meta = listOf(w.year?.toString()), artwork = cover.bitmap, status = session.index.statusOf(w.id), onWant = { onWant(w.id, w.title) }, mode = session.mode, width = Tokens.posterWidth)
                 }
             }
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 32.dp), modifier = Modifier.fillMaxSize()) {

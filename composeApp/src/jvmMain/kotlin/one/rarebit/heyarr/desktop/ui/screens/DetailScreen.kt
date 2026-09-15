@@ -63,6 +63,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import one.rarebit.heyarr.core.auth.GuestGate
+import one.rarebit.heyarr.core.auth.Surface
 import one.rarebit.heyarr.core.feeds.FollowedItem
 import one.rarebit.heyarr.core.heyarr.Candidate
 import one.rarebit.heyarr.core.heyarr.ContinueEntry
@@ -294,6 +296,9 @@ private fun DetailHero(session: AppSession, detail: WorkDetail, type: MediaType,
     val art = cover.bitmap
     val theme = MediaThemes.of(type)
     val status = session.index.statusOf(detail.work.id)
+    // Wanting is an enrolled-only surface; a guest never sees the Want CTA (GuestGate is the
+    // single source of truth) — they can still browse and play whatever holds a file.
+    val canWant = GuestGate.allows(session.mode, Surface.WANT)
     val asset = detail.primaryAsset
     val work = detail.work
     val cont = state.continueEntry
@@ -342,7 +347,9 @@ private fun DetailHero(session: AppSession, detail: WorkDetail, type: MediaType,
                             state.busy = null
                         }
                     }, icon = Icons.Rounded.Search, enabled = state.busy == null)
-                    asset == null -> PrimaryButton("Want", { onWant(work.id, work.title) }, icon = Icons.Rounded.Add, enabled = status == LibraryStatus.NOT_TRACKED)
+                    asset == null && canWant -> PrimaryButton("Want", { onWant(work.id, work.title) }, icon = Icons.Rounded.Add, enabled = status == LibraryStatus.NOT_TRACKED)
+                    // Guest, nothing to play and no want affordance to offer: no primary CTA.
+                    asset == null -> Unit
                     type == MediaType.BOOK -> PrimaryButton(theme.ctaLabel, ::openBook, icon = Icons.Rounded.MenuBook, enabled = state.busy == null)
                     type == MediaType.FEED -> PrimaryButton(theme.ctaLabel, ::openLocal, icon = Icons.Rounded.OpenInNew, enabled = state.busy == null)
                     else -> PrimaryButton(theme.ctaLabel, { playLocal(session, state, asset.blobHash, work.title, scope, assetId = asset.assetId, type = type) }, icon = Icons.Rounded.PlayArrow, enabled = state.busy == null)
@@ -351,7 +358,7 @@ private fun DetailHero(session: AppSession, detail: WorkDetail, type: MediaType,
             secondary = {
                 val castId = if (type == MediaType.SERIES) (first?.asset?.id) else asset?.assetId
                 if (castId != null && type != MediaType.BOOK && type != MediaType.FEED) SecondaryButton("Play on…", { toggleCast(session, state, castId, scope) }, icon = Icons.Rounded.Cast)
-                if (status == LibraryStatus.NOT_TRACKED && (asset != null || type == MediaType.SERIES)) SecondaryButton("Want", { onWant(work.id, work.title) }, icon = Icons.Rounded.Add)
+                if (status == LibraryStatus.NOT_TRACKED && canWant && (asset != null || type == MediaType.SERIES)) SecondaryButton("Want", { onWant(work.id, work.title) }, icon = Icons.Rounded.Add)
             },
         )
         if (asset == null && type != MediaType.SERIES && type != MediaType.FEED && type != MediaType.PODCAST) Notice("Nothing to play yet — ${if (wants.isEmpty()) "not wanted, so nothing is looking for a copy." else "heyarr is looking. Curate → Releases shows what the indexers found."}")

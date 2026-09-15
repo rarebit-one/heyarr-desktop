@@ -56,6 +56,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import one.rarebit.heyarr.core.auth.ClientMode
+import one.rarebit.heyarr.core.auth.GuestGate
+import one.rarebit.heyarr.core.auth.Surface
 import one.rarebit.heyarr.core.state.LibraryStatus
 import one.rarebit.heyarr.ui.theme.CardAspect
 import one.rarebit.heyarr.desktop.theme.LocalAppearance
@@ -114,10 +117,22 @@ fun StatusPill(status: LibraryStatus, modifier: Modifier = Modifier, compact: Bo
 }
 
 /**
+ * Whether a card should offer its Want affordance. Wanting writes desired state, an
+ * enrolled-only [Surface.WANT]: a guest must never see the button (hide it — don't
+ * show-then-refuse), and even an enrolled client hides it once the work is already
+ * in the library. [GuestGate] in `:core` is the single source of truth for the guest
+ * half of that rule; kept as a pure function so the per-card gate is unit-testable
+ * without a Compose harness.
+ */
+fun wantVisible(mode: ClientMode, status: LibraryStatus?): Boolean =
+    GuestGate.allows(mode, Surface.WANT) && status != LibraryStatus.IN_LIBRARY
+
+/**
  * The poster / cover / square card. Aspect, placeholder glyph and accent follow the
  * type; the type badge sits top-left, the status pill top-right, and the one-click
- * Want action appears on hover (or focus) at the bottom edge. Fully keyboard-operable:
- * the card is a focusable button, and Want is a second focus stop.
+ * Want action appears on hover (or focus) at the bottom edge — but only for an enrolled
+ * client ([wantVisible]); a guest never sees a want button that would only be refused.
+ * Fully keyboard-operable: the card is a focusable button, and Want is a second focus stop.
  */
 @Composable
 fun MediaCard(
@@ -130,6 +145,8 @@ fun MediaCard(
     artwork: ImageBitmap? = null,
     status: LibraryStatus? = null,
     onWant: (() -> Unit)? = null,
+    /** The client's mode; a guest ([ClientMode.GUEST]) never sees the Want affordance. */
+    mode: ClientMode = ClientMode.ENROLLED,
     width: Dp = Tokens.posterWidth,
     showBadge: Boolean = true,
     /** 0..1 to draw a progress bar along the art's bottom edge (the continue rail). */
@@ -157,7 +174,7 @@ fun MediaCard(
             if (theme.spineShadow) Box(Modifier.width(10.dp).fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent))))
             if (showBadge) MediaBadge(type, Modifier.align(Alignment.TopStart).padding(8.dp))
             if (status != null) StatusPill(status, Modifier.align(Alignment.TopEnd).padding(8.dp), compact = !hovered)
-            if (onWant != null && status != LibraryStatus.IN_LIBRARY && hovered) {
+            if (onWant != null && wantVisible(mode, status) && hovered) {
                 Box(Modifier.align(Alignment.BottomEnd).padding(8.dp)) {
                     PrimaryButton(if (status == LibraryStatus.NOT_TRACKED || status == null) "Want" else "Wanted", onWant, icon = if (status == LibraryStatus.NOT_TRACKED || status == null) Icons.Rounded.Add else Icons.Rounded.Check, compact = true, enabled = status == LibraryStatus.NOT_TRACKED || status == null)
                 }
