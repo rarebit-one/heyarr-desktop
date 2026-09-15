@@ -16,13 +16,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import one.rarebit.heyarr.core.auth.ClientMode
 import one.rarebit.heyarr.core.auth.Credential
+import one.rarebit.heyarr.core.auth.mode
+import one.rarebit.heyarr.core.discovery.DiscoveredServer
+import one.rarebit.heyarr.core.discovery.MdnsResolver
+import one.rarebit.heyarr.core.discovery.NoMdnsResolver
+import one.rarebit.heyarr.core.discovery.NodeDiscovery
 import one.rarebit.heyarr.desktop.heyarr.HeyarrApi
 import one.rarebit.heyarr.desktop.heyarr.McpResult
 import one.rarebit.heyarr.core.heyarr.QualityProfile
 import one.rarebit.heyarr.core.mcp.McpRefusedException
 import one.rarebit.heyarr.core.mcp.McpTransportException
 import one.rarebit.heyarr.core.net.HttpTransport
+import one.rarebit.heyarr.desktop.login.BearerTokenLogin
+import one.rarebit.heyarr.desktop.login.EnrolUpgrade
 import one.rarebit.heyarr.desktop.open.OpenExternally
 import one.rarebit.heyarr.desktop.playback.Player
 import one.rarebit.heyarr.desktop.settings.DesktopConfig
@@ -73,14 +81,37 @@ class AppSession(
     private val scope: CoroutineScope,
     artworkLoader: ArtworkLoader? = null,
     externalMetadata: ExternalMetadata? = null,
+    /** LAN mDNS browser for auto-discovery; the no-op default keeps previews/tests network-free. */
+    mdns: MdnsResolver = NoMdnsResolver,
 ) {
     var config: DesktopConfig by mutableStateOf(settings.load())
         private set
 
     var appearance: Appearance by mutableStateOf(Appearance())
 
-    val api: HeyarrApi? get() = config.bearerToken.trim().takeIf { it.isNotEmpty() }?.let {
-        HeyarrApi(transport, config.baseUrl, Credential.Bearer(it))
+    // The "Sign in to save" enrol upgrade over the guest default: a device credential wins,
+    // else a pasted bearer token, else [Credential.Guest] (no header → trusted-network guest).
+    private val enrol = EnrolUpgrade(bearer = BearerTokenLogin { config.bearerToken })
+
+    /** The credential the client presents right now — never null; guest when nothing is enrolled. */
+    val credential: Credential get() = enrol.credential()
+
+    /** GUEST (anonymous lease) vs ENROLLED (a real credential) — drives all UI gating. */
+    val mode: ClientMode get() = credential.mode()
+
+    /** True while the client is browsing as an anonymous guest (no login). */
+    val isGuest: Boolean get() = mode == ClientMode.GUEST
+
+    /** The auto-discovery fallback chain (mDNS → DNS name → manual), off `Dispatchers.IO`. */
+    private val discovery = NodeDiscovery(mdns)
+
+    /** Resolve the server to default the connection field to, using the current saved URL as the manual fallback. */
+    suspend fun discoverServer(): DiscoveredServer = withContext(Dispatchers.IO) { discovery.discover(config.baseUrl) }
+
+    // A configured base URL always yields an API — as a guest when there is no credential —
+    // so the desktop browses on a trusted network before any login.
+    val api: HeyarrApi? get() = config.baseUrl.trim().takeIf { it.isNotEmpty() }?.let {
+        HeyarrApi(transport, config.baseUrl, credential)
     }
 
     /** App-wide playback: one mpv for the session, surface owned by the shell. */
@@ -90,7 +121,7 @@ class AppSession(
     val external: ExternalMetadata = externalMetadata ?: ExternalMetadata(enabled = { config.externalMetadata })
     val recent = RecentSearches(RecentSearches.defaultFile())
 
-    var connection: Connection by mutableStateOf(if (config.bearerToken.isBlank()) Connection.UNCONFIGURED else Connection.UNKNOWN)
+    var connection: Connection by mutableStateOf(if (config.baseUrl.isBlank()) Connection.UNCONFIGURED else Connection.UNKNOWN)
         private set
     var lastLatencyMs: Long? by mutableStateOf(null)
         private set
@@ -126,7 +157,7 @@ class AppSession(
         val otherNode = updated.baseUrl != config.baseUrl || updated.bearerToken != config.bearerToken
         config = updated
         artwork.reset()
-        connection = if (updated.bearerToken.isBlank()) Connection.UNCONFIGURED else Connection.UNKNOWN
+        connection = if (updated.baseUrl.isBlank()) Connection.UNCONFIGURED else Connection.UNKNOWN
         if (otherNode) { profiles = emptyList(); index = LibraryIndex.EMPTY; generation++ }
         refreshIndex()
         startHeartbeat()
@@ -199,6 +230,9 @@ class AppSession(
     // ── library index + profiles ─────────────────────────────────────────────────
 
     fun refreshIndex() {
+        // The want index (In library / Wanted / Missing) is owner state a guest cannot read;
+        // asking for it would only earn a 403. Guests browse without it.
+        if (isGuest) { index = LibraryIndex.EMPTY; profiles = emptyList(); return }
         val a = api ?: run { index = LibraryIndex.EMPTY; return }
         scope.launch {
             indexLoading = true
@@ -211,6 +245,9 @@ class AppSession(
 
     /** Optimistic want: the row flips to Wanted at once and rolls back with the refusal on failure. */
     fun want(workId: String, title: String, profile: String, monitor: Boolean = true, reason: String? = null, onDone: (McpResult<*>?) -> Unit = {}) {
+        // Wanting is an enrolled surface; the UI routes a guest to "Sign in to save" first,
+        // but guard here too so a stray call never fires an unauthenticated write at the node.
+        if (isGuest) { onDone(null); return }
         val a = api ?: return
         val before = index
         index = index.withPendingWant(workId, profiles.firstOrNull { it.name == profile }?.id)
@@ -233,9 +270,14 @@ class AppSession(
     suspend fun <T> io(block: () -> T): Result<T> = withContext(Dispatchers.IO) { runCatching(block) }.also { r ->
         r.onSuccess { noteSuccess() }
         r.onFailure { e ->
-            when (e) {
-                is McpTransportException -> { noteTransportFailure(e); toast(Toast.Kind.ERROR, "Can't reach heyarr", e.message) }
-                is McpRefusedException -> toast(Toast.Kind.REFUSED, "heyarr refused", e.error.message, e.error.tool)
+            when {
+                // A guest reaching an enrolled-only endpoint gets a 403 — that is expected, not
+                // a broken connection. Swallow it quietly: browse/play still work, so the node
+                // stays "online" and the caller just sees an empty result. The UI hides those
+                // surfaces for guests anyway; this guards the ones that slip through.
+                isGuest && e is McpTransportException && (e.status == 401 || e.status == 403) -> {}
+                e is McpTransportException -> { noteTransportFailure(e); toast(Toast.Kind.ERROR, "Can't reach heyarr", e.message) }
+                e is McpRefusedException -> toast(Toast.Kind.REFUSED, "heyarr refused", e.error.message, e.error.tool)
                 else -> toast(Toast.Kind.ERROR, "Something went wrong", e.message ?: e.javaClass.simpleName)
             }
         }

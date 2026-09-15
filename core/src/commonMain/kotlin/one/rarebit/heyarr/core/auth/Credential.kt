@@ -52,6 +52,23 @@ sealed interface Credential {
         override fun headerValue() = DeviceCredential.headerValue(cert, proof)
     }
 
+    /**
+     * No credential at all. On a trusted network heyarr serves a request that carries no
+     * `Authorization` header as an anonymous **guest** principal (caps browse/play/subtitle),
+     * minted as a short-lived lease (heyarr-core Phase 1). So the desktop client's default,
+     * before any enrolment, is [Guest]: it sends no header and gets a browse+play session.
+     * Everything that writes desired state or reads encrypted personal state needs the
+     * "Sign in to save" upgrade to one of the credentialled shapes above.
+     */
+    data object Guest : Credential {
+        // A guest presents nothing; there is no header value to send.
+        override fun headerValue() = ""
+
+        // The whole point of a guest request: NO Authorization header, so heyarr's
+        // trusted-network guest path applies rather than a credential check.
+        override fun asHeader(): Map<String, String> = emptyMap()
+    }
+
     companion object {
         const val HEADER = "Authorization"
     }

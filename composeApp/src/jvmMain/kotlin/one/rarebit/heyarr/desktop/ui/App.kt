@@ -39,6 +39,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import one.rarebit.heyarr.core.discovery.MdnsResolver
+import one.rarebit.heyarr.core.discovery.NoMdnsResolver
 import one.rarebit.heyarr.desktop.heyarr.HeyarrApi
 import one.rarebit.heyarr.desktop.heyarr.PlaybackTarget
 import one.rarebit.heyarr.desktop.heyarr.McpResult
@@ -113,6 +115,8 @@ fun App(
     initialRoute: Route = Route.Home,
     artworkLoader: ArtworkLoader? = null,
     externalMetadata: one.rarebit.heyarr.desktop.state.ExternalMetadata? = null,
+    /** LAN mDNS browser for auto-discovery; the no-op default keeps previews/tests network-free. */
+    mdns: MdnsResolver = NoMdnsResolver,
     /** Preview/test seam: a query typed into search on first composition. */
     initialQuery: String? = null,
     /** Preview/test seam: open the connection sheet at once. */
@@ -122,7 +126,7 @@ fun App(
     onFullscreen: (Boolean) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
-    val session = remember { AppSession(settings, transport, player, OpenExternally(downloader, opener), scope, artworkLoader, externalMetadata) }
+    val session = remember { AppSession(settings, transport, player, OpenExternally(downloader, opener), scope, artworkLoader, externalMetadata, mdns) }
     val nav = remember { Nav(initialRoute) }
     val search = remember { SearchController(scope, { session.api }, session::noteTransportFailure) }
     val home = remember { HomeState() }
@@ -139,6 +143,8 @@ fun App(
     val searchFocus = remember { FocusRequester() }
     var focusSearchTick by remember { mutableStateOf(0) }
     var want by remember { mutableStateOf<WantRequest?>(null) }
+    // The "Sign in to save" prompt a guest sees when they reach for an enrolled-only action.
+    var showSignIn by remember { mutableStateOf(false) }
     var showConnection by remember { mutableStateOf(initialConnectionSheet) }
     val connectionState = remember { ConnectionState() }
 
@@ -171,7 +177,7 @@ fun App(
         val kfm = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
         val dispatcher = java.awt.KeyEventDispatcher { e ->
             if (e.id != java.awt.event.KeyEvent.KEY_PRESSED || e.isControlDown || e.isMetaDown || e.isAltDown) return@KeyEventDispatcher false
-            if (!playback.onPlayerScreen || playback.popout || want != null || showConnection) return@KeyEventDispatcher false
+            if (!playback.onPlayerScreen || playback.popout || want != null || showConnection || showSignIn) return@KeyEventDispatcher false
             val key = PlayerKeys.fromAwt(e.keyCode) ?: return@KeyEventDispatcher false
             playback.wakeControls()
             val handled = PlayerKeys.handle(
@@ -214,6 +220,7 @@ fun App(
                         mod && e.key == Key.Four -> { nav.go(Route.Missing); true }
                         mod && e.key == Key.Five -> { nav.go(Route.NowPlaying); true }
                         e.key == Key.Escape && showConnection -> { showConnection = false; true }
+                        e.key == Key.Escape && showSignIn -> { showSignIn = false; true }
                         e.key == Key.Escape && want != null -> { want = null; true }
                         e.key == Key.Escape && (current is Route.Detail || current is Route.Reader) -> { nav.back(); true }
                         else -> false
@@ -237,14 +244,18 @@ fun App(
                                 Connection.UNAUTHORIZED -> OfflineBanner("heyarr refused the token", "Check the bearer token in Settings.", onRetry = { scope.launch { session.probe() } }, onSettings = { nav.go(Route.Settings) })
                                 else -> {}
                             }
-                            val onWant: (String, String) -> Unit = { id, title -> want = WantRequest(id, title) }
-                            val onWantTitle: WantByTitle = { title, year, type -> want = WantRequest(null, title, year, type) }
+                            // Guest choke point: any "save" action (want by id or by title) is an
+                            // enrolled-only surface, so in guest mode it opens the "Sign in to save"
+                            // prompt instead of the Want sheet. This gates want uniformly across
+                            // every screen from one place.
+                            val onWant: (String, String) -> Unit = { id, title -> if (session.isGuest) showSignIn = true else want = WantRequest(id, title) }
+                            val onWantTitle: WantByTitle = { title, year, type -> if (session.isGuest) showSignIn = true else want = WantRequest(null, title, year, type) }
                             Box(Modifier.weight(1f)) { when (val r = current) {
                                 Route.Home -> HomeScreen(session, home, ::go, onWant)
                                 Route.Discover -> DiscoverScreen(session, discover, onWantTitle)
                                 Route.Search -> SearchScreen(session, search, ::go, onWant, onWantTitle, searchFocus)
                                 Route.Library -> LibraryScreen(session, library, ::go, onWant)
-                                Route.Missing -> MissingScreen(session, missing, ::go, onWantTitle = { want = WantRequest(null, "") })
+                                Route.Missing -> MissingScreen(session, missing, ::go, onWantTitle = { if (session.isGuest) showSignIn = true else want = WantRequest(null, "") })
                                 Route.NowPlaying -> NowPlayingScreen(session, nowPlaying)
                                 Route.Settings -> SettingsScreen(session, settingsState, onSourcesChanged = { search.invalidateSources() })
                                 is Route.Detail -> DetailScreen(session, r, details.getOrPut(r.workId) { DetailState(r.workId) }, onBack = nav::back, onOpen = ::go, onWant = onWant)
@@ -260,7 +271,38 @@ fun App(
                     for (t in session.toasts.takeLast(4)) ToastCard(t, onDismiss = { session.dismiss(t) })
                 }
                 want?.let { req -> WantSheet(session, req, onClose = { want = null }) }
+                if (showSignIn) SignInSheet(session, onClose = { showSignIn = false }, onOpenSettings = { showSignIn = false; nav.go(Route.Settings) })
                 if (showConnection) ConnectionSheet(session, connectionState, onClose = { showConnection = false }, onSettings = { nav.go(Route.Settings) })
+            }
+        }
+    }
+}
+
+/**
+ * The "Sign in to save" upgrade sheet a guest sees when they reach for an enrolled-only
+ * action (want / follow / your place). Browsing and playing need no login; this is the
+ * optional step to save wants, follows and resume state. The live upgrade is a pasted
+ * bearer token (the enrol path); device/QR login (Voidbind) is the next upgrade and is
+ * noted here. Paste-and-save flips the client out of guest mode.
+ */
+@Composable
+private fun SignInSheet(session: AppSession, onClose: () -> Unit, onOpenSettings: () -> Unit) {
+    var token by remember { mutableStateOf("") }
+    Box(Modifier.fillMaxSize().background(Tokens.bgBase.copy(alpha = 0.7f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClose), contentAlignment = Alignment.Center) {
+        Box(Modifier.width(520.dp).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})) {
+            Panel("Sign in to save", trailing = { GhostButton("Close", onClose) }) {
+                Text("You're browsing as a guest — watch and listen freely, no account needed. Sign in to save your place, keep playlists, and want or follow things.", style = MaterialTheme.typography.bodyMedium, color = Tokens.textPrimary)
+                Text("Paste a bearer token (heyarr_<id>_<secret>) to sign in on this machine.", style = MaterialTheme.typography.labelMedium, color = Tokens.textMuted)
+                Field("Bearer token", token, secret = true) { token = it }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PrimaryButton("Sign in", {
+                        session.save(session.config.copy(bearerToken = token.trim()))
+                        onClose()
+                    }, icon = Icons.Rounded.Add, enabled = token.isNotBlank())
+                    GhostButton("Open Settings", onOpenSettings)
+                    GhostButton("Keep browsing", onClose)
+                }
+                Text("Device sign-in (Voidbind device/QR) is the next upgrade and is not wired on desktop yet — a pasted token is the way in for now.", style = MaterialTheme.typography.bodySmall, color = Tokens.textDisabled)
             }
         }
     }
