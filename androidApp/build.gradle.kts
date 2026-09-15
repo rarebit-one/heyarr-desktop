@@ -101,6 +101,15 @@ android {
             signingConfig = releaseKeystore?.let { signingConfigs.getByName("release") }
         }
     }
+
+    lint {
+        // AGP 8.7.3's bundled lint uses a Kotlin 2.0-era UAST analyzer that throws
+        // IncompatibleClassChangeError on our Kotlin 2.3.20 module metadata, crashing
+        // lintVitalRelease during `assembleRelease` (debug is unaffected — it skips
+        // lint-vital). Don't run lint as part of the release build; `./gradlew lint`
+        // is still available on demand. Revisit when AGP ships a Kotlin 2.3-compatible lint.
+        checkReleaseBuilds = false
+    }
 }
 
 kotlin {
