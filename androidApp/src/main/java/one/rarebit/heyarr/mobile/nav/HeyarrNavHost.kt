@@ -10,9 +10,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -67,8 +73,10 @@ import one.rarebit.heyarr.mobile.theme.MediaType
 import one.rarebit.heyarr.mobile.theme.Tokens
 import one.rarebit.heyarr.mobile.ui.components.HeyarrBottomBar
 import one.rarebit.heyarr.mobile.ui.components.HeyarrNavRail
+import one.rarebit.heyarr.mobile.ui.components.GhostButton
 import one.rarebit.heyarr.mobile.ui.components.NowPlayingBar
 import one.rarebit.heyarr.mobile.ui.components.OfflineBanner
+import one.rarebit.heyarr.mobile.ui.components.PrimaryButton
 import one.rarebit.heyarr.mobile.ui.components.ToastCard
 import one.rarebit.heyarr.mobile.ui.screens.AudioQueueScreen
 import one.rarebit.heyarr.mobile.ui.screens.CastScreen
@@ -104,6 +112,8 @@ fun HeyarrNavHost(
     vm: AppViewModel,
     graph: AppGraph,
     focusDevice: Int,
+    /** Raise the "Sign in to save" upgrade (QR/device) over the guest shell. */
+    onSignInToSave: () -> Unit = {},
     navController: NavHostController = rememberNavController(),
 ) {
     val config by vm.configState.collectAsStateWithLifecycle()
@@ -116,7 +126,9 @@ fun HeyarrNavHost(
     val video = graph.video
     val audioState by audio.state.collectAsStateWithLifecycle()
 
-    val credential = vm.credentialOrNull() ?: return
+    // Never null: Credential.Guest when nothing is enrolled (guest-as-default). The env key
+    // includes the credential class, so adopting a real credential rebuilds the session enrolled.
+    val credential = vm.effectiveCredential()
     val env = ApiEnv(config.baseUrl, config.defaultQualityProfile, credential, vm.transport)
     val holder: SessionHolder = viewModel(
         key = "session:${env.key}",
@@ -127,6 +139,9 @@ fun HeyarrNavHost(
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     var want by remember { mutableStateOf<WantRequest?>(null) }
+    // A guest tapped a gated affordance (Want, Follow, playlists…): offer the upgrade instead
+    // of firing an unauthenticated write. The string is the surface, for the sheet's copy.
+    var signInPrompt by remember { mutableStateOf<String?>(null) }
     var openPlayerOnAudio by remember { mutableStateOf(false) }
 
     LaunchedEffect(session) { session.startHeartbeat(); session.refreshIndex() }
@@ -226,7 +241,11 @@ fun HeyarrNavHost(
         onAddToPlaylist = { id -> personalActions.openAddToPlaylist(id) },
     )
 
-    val onWant: (String, String) -> Unit = { id, title -> want = WantRequest(id, title) }
+    // The single Want choke point: a guest is routed to "Sign in to save" (GuestGate — WANT
+    // requires enrolment); an enrolled client opens the Want sheet.
+    val onWant: (String, String) -> Unit = { id, title ->
+        if (session.isGuest) signInPrompt = "want" else want = WantRequest(id, title)
+    }
     val play = DetailPlayback(
         playVideo = { work, assetId, hash, mime, title, start, queue, art, subtitles ->
             personalActions.recordPlay(work.id)
@@ -289,13 +308,13 @@ fun HeyarrNavHost(
                         Box(Modifier.weight(1f)) {
                             val content = Modifier.fillMaxSize()
                             NavHost(navController = navController, startDestination = Route.Home) {
-                                composable<Route.Home> { HomeScreen(session, holder.home, ::open, onWant, onPlayContinue = { e -> e.blobHash?.let { vm.playback.playFile(e.workTitle + (e.subtitle?.let { s -> " — $s" } ?: ""), e.assetId, it, e.mime, e.contentType, startSeconds = e.positionSeconds, artworkUrl = e.artworkPath?.let { p -> one.rarebit.heyarr.mobile.heyarr.HeyarrApi.blobUrlFromPath(env.baseUrl, p) }) } }, modifier = content, personal = personalRows) }
-                                composable<Route.Discover> { HomeScreen(session, holder.home, ::open, onWant, onPlayContinue = { e -> e.blobHash?.let { vm.playback.playFile(e.workTitle, e.assetId, it, e.mime, e.contentType, startSeconds = e.positionSeconds) } }, modifier = content, discover = true, personal = personalRows) }
+                                composable<Route.Home> { HomeScreen(session, holder.home, ::open, onWant, onPlayContinue = { e -> e.blobHash?.let { vm.playback.playFile(e.workTitle + (e.subtitle?.let { s -> " — $s" } ?: ""), e.assetId, it, e.mime, e.contentType, startSeconds = e.positionSeconds, artworkUrl = e.artworkPath?.let { p -> one.rarebit.heyarr.mobile.heyarr.HeyarrApi.blobUrlFromPath(env.baseUrl, p) }) } }, modifier = content, personal = personalRows, onSignInToSave = onSignInToSave) }
+                                composable<Route.Discover> { HomeScreen(session, holder.home, ::open, onWant, onPlayContinue = { e -> e.blobHash?.let { vm.playback.playFile(e.workTitle, e.assetId, it, e.mime, e.contentType, startSeconds = e.positionSeconds) } }, modifier = content, discover = true, personal = personalRows, onSignInToSave = onSignInToSave) }
                                 composable<Route.Search> {
                                     SearchScreen(session, holder.search, ::open, onWant, onPlayEpisode = { ep -> ep.blobHash?.let { vm.playback.playFile("${ep.workTitle ?: ""} — ${ep.title}".trimStart(' ', '—'), ep.assetId ?: ep.id, it, ep.mime, ep.contentType ?: "series") } }, modifier = content)
                                 }
                                 composable<Route.Library> { LibraryScreen(session, holder.library, ::open, onWant, modifier = content, onPlaylists = if (personalActions.enabled) ({ open(Route.Playlists) }) else null) }
-                                composable<Route.Missing> { MissingScreen(session, holder.missing, ::open, onWantTitle = { want = WantRequest(null, "") }, modifier = content) }
+                                composable<Route.Missing> { MissingScreen(session, holder.missing, ::open, onWantTitle = { if (session.isGuest) signInPrompt = "want" else want = WantRequest(null, "") }, modifier = content) }
                                 composable<Route.Cast> { CastScreen(session, holder.cast, modifier = content) }
                                 composable<Route.Settings> {
                                     SettingsScreen(
@@ -303,6 +322,8 @@ fun HeyarrNavHost(
                                         onSaveConnection = vm::updateSettings, onResetConnection = vm::resetSettings, onSignOut = vm::signOut,
                                         onTelemetry = { open(Route.Telemetry) }, onDevice = { open(Route.Device) },
                                         onSourcesChanged = { holder.search.invalidateSources() }, modifier = content, deviceSummary = deviceSummary,
+                                        isGuest = session.isGuest, onSignInToSave = onSignInToSave,
+                                        onDiscover = { vm.discoverAndSave { found -> session.toast(Toast.Kind.INFO, "Discovered a node (${found.source.name.lowercase()})", found.baseUrl) } },
                                     )
                                 }
                                 composable<Route.Telemetry> {
@@ -376,6 +397,7 @@ fun HeyarrNavHost(
                     for (t in session.toasts.takeLast(3)) ToastCard(t, onDismiss = { session.dismiss(t) })
                 }
                 want?.let { req -> WantSheet(session, req, onClose = { want = null }) }
+                signInPrompt?.let { GuestUpsellSheet(onSignIn = { signInPrompt = null; onSignInToSave() }, onDismiss = { signInPrompt = null }) }
                 addTarget?.let {
                     AddToPlaylistDialog(
                         playlists = playlistsForAdd,
@@ -384,6 +406,33 @@ fun HeyarrNavHost(
                         onDismiss = { personalActions.dismissAddToPlaylist() },
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The "Sign in to save" upgrade sheet a guest sees when they reach for an enrolled-only
+ * surface (Want / Follow / a playlist). Guests browse and play freely; saving desired
+ * state and personal state (`GuestGate.Surface`) needs an identity, so this offers the
+ * QR/device sign-in rather than firing an unauthenticated write.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GuestUpsellSheet(onSignIn: () -> Unit, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Tokens.surface1, contentColor = Tokens.textPrimary) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Sign in to save", style = MaterialTheme.typography.headlineSmall, color = Tokens.textPrimary)
+            Text(
+                "You're browsing as a guest — watch, listen and read freely. To keep wants, follows, playlists and your place across devices, sign in with Cruciform or enrol this phone.",
+                style = MaterialTheme.typography.bodyMedium, color = Tokens.textMuted,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PrimaryButton("Sign in to save", onSignIn)
+                GhostButton("Not now", onDismiss)
             }
         }
     }

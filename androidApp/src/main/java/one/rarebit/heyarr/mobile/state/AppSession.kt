@@ -11,6 +11,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import one.rarebit.heyarr.core.auth.ClientMode
+import one.rarebit.heyarr.core.auth.Credential
+import one.rarebit.heyarr.core.auth.mode
 import one.rarebit.heyarr.mobile.heyarr.HeyarrApi
 import one.rarebit.heyarr.mobile.heyarr.McpResult
 import one.rarebit.heyarr.core.heyarr.QualityProfile
@@ -49,8 +52,21 @@ class AppSession(
     val external: ExternalMetadata,
     val recent: RecentSearches,
     private val scope: CoroutineScope,
+    /**
+     * The credential this session's [api] presents — [Credential.Guest] when the phone
+     * is browsing anonymously (guest-as-default), else the enrolled Bearer/Device.
+     * Drives all UI gating through [mode]; defaults to Guest so previews/tests that
+     * don't care get the browse-only surface.
+     */
+    val credential: Credential = Credential.Guest,
 ) {
     val baseUrl: String get() = api.baseUrl
+
+    /** GUEST (anonymous lease) vs ENROLLED (a real credential) — the single gate every screen consults. */
+    val mode: ClientMode get() = credential.mode()
+
+    /** True while this session is browsing as an anonymous guest (no login). */
+    val isGuest: Boolean get() = mode == ClientMode.GUEST
 
     var appearance: Appearance by mutableStateOf(Appearance(settings.adaptiveAccents, settings.reduceMotion))
         private set
@@ -127,6 +143,9 @@ class AppSession(
     // ── library index + profiles ─────────────────────────────────────────────────
 
     fun refreshIndex() {
+        // The want index (In library / Wanted / Missing) is owner state a guest cannot read;
+        // asking for it would only earn a 403. Guests browse without it.
+        if (isGuest) { index = LibraryIndex.EMPTY; profiles = emptyList(); return }
         scope.launch {
             indexLoading = true
             val result = io { api.desired() }
@@ -138,6 +157,9 @@ class AppSession(
 
     /** Optimistic want: the card flips to Wanted at once and rolls back with the refusal on failure. */
     fun want(workId: String, title: String, profile: String, onDone: (McpResult<*>?) -> Unit = {}) {
+        // Wanting is an enrolled surface; the UI routes a guest to "Sign in to save" first,
+        // but guard here too so a stray call never fires an unauthenticated write at the node.
+        if (isGuest) { onDone(null); return }
         val before = index
         index = index.withPendingWant(workId, profiles.firstOrNull { it.name == profile }?.id)
         scope.launch {
@@ -159,9 +181,14 @@ class AppSession(
     suspend fun <T> io(block: () -> T): Result<T> = withContext(Dispatchers.IO) { runCatching(block) }.also { r ->
         r.onSuccess { noteSuccess() }
         r.onFailure { e ->
-            when (e) {
-                is McpTransportException -> { noteTransportFailure(e); toast(Toast.Kind.ERROR, "Can't reach heyarr", e.message) }
-                is McpRefusedException -> toast(Toast.Kind.REFUSED, "heyarr refused", e.error.message, e.error.tool)
+            when {
+                // A guest reaching an enrolled-only endpoint gets a 401/403 — expected, not a
+                // broken connection. Swallow it quietly so the node stays "online" and browse/
+                // play keep working; the UI hides those surfaces for guests, this guards the
+                // ones that slip through (the existing "Guest → 403" call sites).
+                isGuest && e is McpTransportException && (e.status == 401 || e.status == 403) -> {}
+                e is McpTransportException -> { noteTransportFailure(e); toast(Toast.Kind.ERROR, "Can't reach heyarr", e.message) }
+                e is McpRefusedException -> toast(Toast.Kind.REFUSED, "heyarr refused", e.error.message, e.error.tool)
                 else -> toast(Toast.Kind.ERROR, "Something went wrong", e.message ?: e.javaClass.simpleName)
             }
         }

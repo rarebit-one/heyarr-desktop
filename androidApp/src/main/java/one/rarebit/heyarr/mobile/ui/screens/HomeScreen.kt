@@ -2,6 +2,7 @@ package one.rarebit.heyarr.mobile.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -98,6 +99,8 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     discover: Boolean = false,
     personal: PersonalRows = PersonalRows(),
+    /** Raise the "Sign in to save" upgrade — shown on the guest banner. */
+    onSignInToSave: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
 
@@ -119,10 +122,18 @@ fun HomeScreen(
             val r = session.io { a.listByType(t, limit = 40) }.fold(onSuccess = { RailState.Loaded(it.works) }, onFailure = { RailState.Failed(it.message ?: "failed") })
             state.byType = state.byType + (t to r)
         }
-        scope.launch { state.missing = session.io { a.missing(40) }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
-        scope.launch { state.upgrades = session.io { a.upgradeCandidates(40) }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
-        scope.launch { state.followed = session.io { a.followed() }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
-        scope.launch { state.continueRail = session.io { a.continueRail() }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+        // The want index (Missing / Could-be-better), followed sources and the continue rail
+        // are enrolled-only surfaces (GuestGate): a guest would only earn a 403, so skip them
+        // and leave the rails empty (they hide themselves) rather than showing an error.
+        if (session.isGuest) {
+            state.missing = RailState.Loaded(emptyList()); state.upgrades = RailState.Loaded(emptyList())
+            state.followed = RailState.Loaded(emptyList()); state.continueRail = RailState.Loaded(emptyList())
+        } else {
+            scope.launch { state.missing = session.io { a.missing(40) }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+            scope.launch { state.upgrades = session.io { a.upgradeCandidates(40) }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+            scope.launch { state.followed = session.io { a.followed() }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+            scope.launch { state.continueRail = session.io { a.continueRail() }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+        }
     }
 
     LaunchedEffect(Unit) { if (!state.loadedOnce) load() }
@@ -133,6 +144,7 @@ fun HomeScreen(
     }
 
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = Tokens.s4), verticalArrangement = Arrangement.spacedBy(28.dp)) {
+        if (session.isGuest) item { Box(Modifier.padding(horizontal = Tokens.screenPadding)) { GuestBanner(onSignInToSave) } }
         item { Box(Modifier.padding(horizontal = Tokens.screenPadding)) { SpotlightBlock(session, state, onOpen, onWant) } }
         if (discover) item {
             Notice(
@@ -187,9 +199,9 @@ fun HomeScreen(
                 }
             }
         }
-        item { WantRail("Wanted but missing", state.missing, onOpen, subtitle = "Wants nothing acceptable has satisfied yet", emptyText = "Nothing is missing — every want is satisfied.") }
-        item { WantRail("Could be better", state.upgrades, onOpen, subtitle = "Satisfied and monitored; a better release may still turn up", emptyText = "No upgrade candidates.") }
-        item {
+        if (!session.isGuest) item { WantRail("Wanted but missing", state.missing, onOpen, subtitle = "Wants nothing acceptable has satisfied yet", emptyText = "Nothing is missing — every want is satisfied.") }
+        if (!session.isGuest) item { WantRail("Could be better", state.upgrades, onOpen, subtitle = "Satisfied and monitored; a better release may still turn up", emptyText = "No upgrade candidates.") }
+        if (!session.isGuest) item {
             MediaScope(MediaType.PODCAST) {
                 Rail("Following", state.followed, subtitle = "Standing subscriptions the node polls", emptyText = "You follow nothing yet — add a feed or TVDB series in Settings.", skeletonAspect = CardAspect.SQUARE, skeletonWidth = Tokens.squareWidth, key = { it.id }) { s ->
                     val type = MediaType.from(s.type)
@@ -202,6 +214,20 @@ fun HomeScreen(
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+/** The guest affordance at the top of Home: browse freely, and a route to "Sign in to save". */
+@Composable
+private fun GuestBanner(onSignIn: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Notice(
+            "Browsing as guest — watch, listen and read freely.",
+            tone = Tokens.slate,
+            icon = Icons.Rounded.Info,
+            detail = "Sign in to keep wants, follows, playlists and your place across devices.",
+        )
+        SecondaryButton("Sign in to save", onSignIn, icon = Icons.Rounded.Star)
     }
 }
 

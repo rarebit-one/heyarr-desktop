@@ -37,6 +37,7 @@ class SessionHolder(
         external = external,
         recent = recent,
         scope = viewModelScope,
+        credential = env.credential,
     )
     val search = SearchController(viewModelScope, { session.api }, session::noteTransportFailure)
     val home = HomeState()

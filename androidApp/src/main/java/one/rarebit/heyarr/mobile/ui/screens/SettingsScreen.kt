@@ -80,13 +80,19 @@ fun SettingsScreen(
     onSourcesChanged: () -> Unit,
     modifier: Modifier = Modifier,
     deviceSummary: String? = null,
+    /** True while browsing anonymously — hides enrolled-only panels, shows "Sign in to save". */
+    isGuest: Boolean = false,
+    onSignInToSave: () -> Unit = {},
+    /** Run the mDNS → DNS discovery chain and save the node it finds. */
+    onDiscover: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     fun load() {
         scope.launch { session.io { session.api.followed() }.onSuccess { state.followed = it } }
         scope.launch { session.io { session.api.peers() }.onSuccess { state.peers = it } }
     }
-    LaunchedEffect(Unit) { if (state.followed == null) load() }
+    // Followed sources and peers are enrolled-only reads; a guest never loads them.
+    LaunchedEffect(Unit) { if (!isGuest && state.followed == null) load() }
 
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = Tokens.screenPadding, vertical = Tokens.s4), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { SectionHeader("Settings") }
@@ -101,25 +107,29 @@ fun SettingsScreen(
                 }
                 KeyValue("status", label + (session.lastLatencyMs?.let { " · $it ms" } ?: ""), valueColor = tone)
                 KeyValue("signed in", when {
+                    isGuest -> "browsing as guest — browse, play, subtitles"
                     authority == null -> "session unverified"
                     authority.isDevice -> "enrolled device · " + (if (authority.canWrite) "can write" else "read-only until an admin authorises its key")
                     authority.canWrite -> "${authority.kind} · can write"
                     else -> "${authority.kind} · read-only"
                 })
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SecondaryButton("Discover on network", onDiscover, compact = true)
                     SecondaryButton("Connection details", onTelemetry, compact = true)
-                    SecondaryButton("Sign out", onSignOut, compact = true, danger = true)
+                    if (isGuest) SecondaryButton("Sign in to save", onSignInToSave, compact = true)
+                    else SecondaryButton("Sign out", onSignOut, compact = true, danger = true)
                 }
             }
         }
         item {
             Panel("This device") {
                 Text(deviceSummary ?: "Enrol this phone as a Voidbind device to sign in with its own key and to keep encrypted personal state here.", style = MaterialTheme.typography.bodySmall, color = Tokens.textMuted)
-                SecondaryButton("Device enrolment", onDevice, compact = true)
+                SecondaryButton(if (isGuest) "Sign in to save" else "Device enrolment", if (isGuest) onSignInToSave else onDevice, compact = true)
             }
         }
-        item { FollowedPanel(session, state, { load(); onSourcesChanged() }) }
-        item { PeersPanel(session, state) }
+        // Followed sources and peers write/read owner state — hidden for a guest.
+        if (!isGuest) item { FollowedPanel(session, state, { load(); onSourcesChanged() }) }
+        if (!isGuest) item { PeersPanel(session, state) }
         item { AppearancePanel(session) }
     }
 }
