@@ -29,6 +29,8 @@ import one.rarebit.heyarr.ui.theme.CardAspect as Aspect
 import one.rarebit.heyarr.desktop.library.Work
 import one.rarebit.heyarr.core.mcp.SearchHit
 import one.rarebit.heyarr.core.mcp.Want
+import one.rarebit.heyarr.core.auth.GuestGate
+import one.rarebit.heyarr.core.auth.Surface
 import one.rarebit.heyarr.desktop.state.AppSession
 import one.rarebit.heyarr.core.state.LibraryStatus
 import one.rarebit.heyarr.desktop.ui.components.rememberCover
@@ -147,7 +149,7 @@ fun HomeScreen(session: AppSession, state: HomeState, onOpen: (Route) -> Unit, o
                     MediaCard(
                         hit.title, MediaType.from(hit.contentType), onOpen = { onOpen(Route.Detail(hit.workId, t, hit.title, from = "Home")) },
                         subtitle = hit.creator, meta = listOf(hit.year?.toString()), artwork = cover.bitmap, status = status,
-                        onWant = { onWant(hit.workId, hit.title) }, width = if (MediaThemes.of(t).aspect == CardAspect.SQUARE) Tokens.squareWidth else Tokens.posterWidth, showBadge = false,
+                        onWant = { onWant(hit.workId, hit.title) }, mode = session.mode, width = if (MediaThemes.of(t).aspect == CardAspect.SQUARE) Tokens.squareWidth else Tokens.posterWidth, showBadge = false,
                     )
                 }
             }
@@ -189,7 +191,7 @@ private fun SpotlightBlock(session: AppSession, state: HomeState, onOpen: (Route
                     PrimaryButton(theme.ctaLabel, { onOpen(Route.Detail(work.id, type, work.title, from = "Home")) }, icon = Icons.Rounded.PlayArrow)
                 },
                 secondary = {
-                    if (status == LibraryStatus.NOT_TRACKED) SecondaryButton("Want", { onWant(work.id, work.title) }, icon = Icons.Rounded.Add)
+                    if (status == LibraryStatus.NOT_TRACKED && GuestGate.allows(session.mode, Surface.WANT)) SecondaryButton("Want", { onWant(work.id, work.title) }, icon = Icons.Rounded.Add)
                     if (s.items.size > 1) GhostButton("Next", { i = (i + 1) % s.items.size })
                 },
             )
@@ -203,7 +205,7 @@ private fun WorkRail(title: String, state: RailState<Work>, session: AppSession,
         val type = MediaType.from(w.kind)
         val status = session.index.statusOf(w.id)
         val cover by rememberCover(session, type, w.title, w.artworkPath, w.year, w.artist ?: w.author)
-        MediaCard(w.title, type, onOpen = { onOpen(Route.Detail(w.id, type, w.title, from = "Home")) }, subtitle = w.artist ?: w.author, meta = listOf(w.year?.toString()), artwork = cover.bitmap, status = status, onWant = { onWant(w.id, w.title) })
+        MediaCard(w.title, type, onOpen = { onOpen(Route.Detail(w.id, type, w.title, from = "Home")) }, subtitle = w.artist ?: w.author, meta = listOf(w.year?.toString()), artwork = cover.bitmap, status = status, onWant = { onWant(w.id, w.title) }, mode = session.mode)
     }
 }
 

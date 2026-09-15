@@ -55,6 +55,8 @@ import one.rarebit.heyarr.desktop.heyarr.McpResult
 import one.rarebit.heyarr.core.mcp.DiscoveryHit
 import one.rarebit.heyarr.desktop.state.AppSession
 import one.rarebit.heyarr.desktop.state.ArtworkLoader
+import one.rarebit.heyarr.core.auth.GuestGate
+import one.rarebit.heyarr.core.auth.Surface
 import one.rarebit.heyarr.core.state.LibraryStatus
 import one.rarebit.heyarr.desktop.state.SearchController
 import one.rarebit.heyarr.core.state.SearchFilter
@@ -167,7 +169,9 @@ private fun ResultRow(session: AppSession, row: SearchRow, selected: Boolean, on
                 meta = listOf(hit.year?.toString(), hit.attributes["runtime"], hit.attributes["album"], hit.attributes["series"]),
                 artwork = cover.bitmap, status = status, selected = selected,
                 trailing = {
-                    if (status == LibraryStatus.NOT_TRACKED) PrimaryButton("Want", { onWant(hit.workId, hit.title) }, icon = Icons.Rounded.Add, compact = true, contentDescription = "Want ${hit.title}")
+                    // Want writes desired state (enrolled-only Surface.WANT): hide it for a
+                    // guest — GuestGate is the single source of truth — and fall back to Open.
+                    if (status == LibraryStatus.NOT_TRACKED && GuestGate.allows(session.mode, Surface.WANT)) PrimaryButton("Want", { onWant(hit.workId, hit.title) }, icon = Icons.Rounded.Add, compact = true, contentDescription = "Want ${hit.title}")
                     else SecondaryButton("Open", onOpen, compact = true)
                 },
             )
