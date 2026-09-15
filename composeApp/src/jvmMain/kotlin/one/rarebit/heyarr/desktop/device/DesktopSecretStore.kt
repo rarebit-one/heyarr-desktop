@@ -36,21 +36,28 @@ import javax.crypto.spec.SecretKeySpec
  * other OS users (file mode 0600 + the wrap key held apart from the ciphertext). It does
  * **NOT** defend against an attacker who already has code execution or read access AS
  * THIS OS USER — they can read the key file and re-derive the wrap key, exactly as this
- * process does. On a plain JVM that is unavoidable; a hardware/OS-keychain-backed store
- * (option a) is the flagged follow-up. `DeviceKeyStore.isHardwareBacked` is honestly
- * `false` and the desktop tier is reported as SOFTWARE.
+ * process does. On a plain JVM that is unavoidable, so this store honestly reports
+ * [KeyTier.SOFTWARE]. Option (a) — the OS-keychain-backed store — is now implemented in
+ * [KeychainSecretStore] and preferred where a keychain is reachable; this sealed file is the
+ * fallback when it is not.
  *
  * POSIX perms are best-effort (mirrors `FileSettingsStore`); ignored on a non-POSIX FS.
+ *
+ * This is the [SecretStore] fallback: always available, and the store the tests exercise.
+ * When an OS keychain is present, [KeychainSecretStore] wraps this one as its migration
+ * source so an enrolment created here is not lost on upgrade.
  */
 class DesktopSecretStore(
     private val dir: File,
     private val keyFile: File,
     private val random: SecureRandom = SecureRandom(),
-) {
+) : SecretStore {
 
-    fun exists(name: String): Boolean = file(name).exists()
+    override val tier: KeyTier get() = KeyTier.SOFTWARE
 
-    fun seal(name: String, secret: ByteArray) {
+    override fun exists(name: String): Boolean = file(name).exists()
+
+    override fun seal(name: String, secret: ByteArray) {
         val iv = ByteArray(GCM_IV_BYTES).also { random.nextBytes(it) }
         val cipher = Cipher.getInstance(TRANSFORMATION).apply {
             init(Cipher.ENCRYPT_MODE, wrapKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
@@ -59,7 +66,7 @@ class DesktopSecretStore(
         writeFramed(file(name), iv, ct)
     }
 
-    fun unseal(name: String): ByteArray? {
+    override fun unseal(name: String): ByteArray? {
         val f = file(name)
         if (!f.exists()) return null
         val (iv, ct) = readFramed(f) ?: return null
@@ -71,7 +78,7 @@ class DesktopSecretStore(
         }.getOrNull()
     }
 
-    fun delete(name: String) {
+    override fun delete(name: String) {
         file(name).delete()
     }
 

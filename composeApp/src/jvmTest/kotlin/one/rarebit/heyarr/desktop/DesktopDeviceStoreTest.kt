@@ -3,6 +3,8 @@ package one.rarebit.heyarr.desktop
 import one.rarebit.heyarr.desktop.device.DesktopDeviceKeyring
 import one.rarebit.heyarr.desktop.device.DesktopEd25519
 import one.rarebit.heyarr.desktop.device.DesktopSecretStore
+import one.rarebit.heyarr.desktop.device.KeyTier
+import one.rarebit.heyarr.desktop.device.KeychainSecretStore
 import one.rarebit.voidbind.Ed25519Verifier
 import one.rarebit.voidbind.auth.DeviceCredential
 import one.rarebit.voidbind.auth.PossessionProof
@@ -24,6 +26,10 @@ class DesktopDeviceStoreTest {
 
     private fun keyFile() = File(tmp, "device.key")
     private fun dataDir() = File(tmp, "device")
+
+    /** A hermetic sealed-file store on the same paths the keyring's default would use — so
+     *  these tests never touch a real OS keychain on a dev/build machine that has one. */
+    private fun sealedStore(dataDir: File = dataDir()) = DesktopSecretStore(File(dataDir, "sealed"), keyFile())
 
     // ── DesktopSecretStore: seal/unseal round-trips, survives a fresh instance ──────
 
@@ -53,7 +59,7 @@ class DesktopDeviceStoreTest {
     // ── DesktopDeviceKeyring: provisioning + persistence, no admission → no credential ──
 
     @Test fun keyring_provisions_once_and_reloads_the_same_device_key() {
-        val ring = DesktopDeviceKeyring(dataDir(), keyFile())
+        val ring = DesktopDeviceKeyring(dataDir(), keyFile(), secrets = sealedStore())
         assertTrue(!ring.isProvisioned())
         assertNull(ring.peek())
 
@@ -63,17 +69,31 @@ class DesktopDeviceStoreTest {
         assertTrue(info.deviceEncKey.startsWith("x25519:"), "enc key is an x25519 ref")
         assertNull(info.certToken)
         assertTrue(!info.isEnrolled)
+        assertEquals(KeyTier.SOFTWARE, info.tier, "sealed-file store reports the SOFTWARE tier")
 
         // A relaunch (fresh keyring, same paths) loads the SAME key — the enrolment survives.
-        val reloaded = DesktopDeviceKeyring(dataDir(), keyFile())
+        val reloaded = DesktopDeviceKeyring(dataDir(), keyFile(), secrets = sealedStore())
         assertEquals(info.deviceKey, reloaded.info().deviceKey)
         assertEquals(info.deviceEncKey, reloaded.info().deviceEncKey)
     }
 
     @Test fun no_admission_means_no_device_credential() {
-        val ring = DesktopDeviceKeyring(dataDir(), keyFile())
+        val ring = DesktopDeviceKeyring(dataDir(), keyFile(), secrets = sealedStore())
         ring.info() // provisioned but never paired
         assertNull(ring.deviceCredential())
+    }
+
+    @Test fun keyring_over_a_keychain_store_reports_the_keychain_tier() {
+        val backend = object : one.rarebit.heyarr.desktop.device.KeychainBackend {
+            val items = HashMap<String, ByteArray>()
+            override val label = "fake"
+            override fun isAvailable() = true
+            override fun store(account: String, secret: ByteArray): Boolean { items[account] = secret.copyOf(); return true }
+            override fun retrieve(account: String): ByteArray? = items[account]?.copyOf()
+            override fun remove(account: String) { items.remove(account) }
+        }
+        val ring = DesktopDeviceKeyring(dataDir(), keyFile(), secrets = KeychainSecretStore(backend))
+        assertEquals(KeyTier.KEYCHAIN, ring.info().tier)
     }
 
     // ── DesktopEd25519 is wire-compatible with voidbind's verifier ──────────────────
