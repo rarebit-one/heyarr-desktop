@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import one.rarebit.heyarr.desktop.device.DeviceKeyInfo
+import one.rarebit.heyarr.desktop.device.KeyTier
 import one.rarebit.heyarr.desktop.device.PairingState
 import one.rarebit.heyarr.desktop.state.AppSession
 import one.rarebit.heyarr.ui.theme.Tokens
@@ -75,7 +76,7 @@ fun EnrolPanel(session: AppSession) {
 
         info?.let { i ->
             KeyValue("device key", i.deviceKey)
-            KeyValue("protection", "software key, sealed at rest (no secure element on desktop)", valueColor = Tokens.textMuted)
+            KeyValue("protection", protectionText(i.tier), valueColor = Tokens.textMuted)
             if (i.isEnrolled) {
                 KeyValue("enrolled to", i.userId ?: "an identity", valueColor = Tokens.success)
                 SecondaryButton("Forget this device", {
@@ -137,9 +138,18 @@ fun EnrolPanel(session: AppSession) {
         }
 
         Text(
-            "The device signing key is generated on this machine and sealed at rest under " +
-                "~/.local/share/heyarr-desktop; it never leaves. A possession proof is signed per session.",
+            "The device signing key is generated on this machine and kept in the OS keychain " +
+                "where one is available, else sealed at rest under ~/.local/share/heyarr-desktop; " +
+                "it never leaves. A possession proof is signed per session.",
             style = MaterialTheme.typography.bodySmall, color = Tokens.textDisabled,
         )
     }
+}
+
+/** Honest one-line description of how the device seed is protected, by [KeyTier]. */
+private fun protectionText(tier: KeyTier): String = when (tier) {
+    KeyTier.STRONGBOX -> "hardware-backed key (StrongBox)"
+    KeyTier.TEE -> "hardware-backed key (secure element)"
+    KeyTier.KEYCHAIN -> "held in the OS keychain (macOS Keychain / libsecret)"
+    KeyTier.SOFTWARE -> "software key, sealed at rest (no secure element on desktop)"
 }

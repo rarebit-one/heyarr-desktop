@@ -9,8 +9,16 @@ import one.rarebit.voidbind.crypto.MiniJson
 import one.rarebit.voidbind.net.Admission
 import java.io.File
 
-/** The honest hardware tier of the desktop device key. On a plain JVM this is always SOFTWARE. */
-enum class KeyTier { STRONGBOX, TEE, SOFTWARE }
+/**
+ * The honest protection tier of the desktop device key.
+ *
+ *  - [STRONGBOX] / [TEE] — hardware-backed (phones). Never reported on a plain JVM.
+ *  - [KEYCHAIN] — the seed lives in the OS keychain (macOS Keychain / libsecret Secret
+ *    Service), not on disk: OS-owned storage + access control ([KeychainSecretStore]).
+ *  - [SOFTWARE] — an AES-256-GCM file sealed by a locally-held key ([DesktopSecretStore]):
+ *    at-rest protection only. The fallback when no keychain is reachable.
+ */
+enum class KeyTier { STRONGBOX, TEE, KEYCHAIN, SOFTWARE }
 
 /** What this desktop holds, for the enrol UI. Mirrors heyarr-mobile's `DeviceKeyInfo`. */
 data class DeviceKeyInfo(
@@ -51,8 +59,14 @@ class DesktopDeviceKeyring(
     private val dataDir: File = defaultDataDir(),
     keyFile: File = defaultKeyFile(),
     private val clock: () -> Long = { System.currentTimeMillis() / 1000 },
+    /**
+     * Where the signing seed / encryption key are persisted. Defaults to the platform pick
+     * (OS keychain where reachable, else the sealed file) — the availability probe is deferred
+     * to first use, so constructing a keyring stays I/O-free. Tests inject a
+     * [DesktopSecretStore] for a hermetic sealed-file path.
+     */
+    private val secrets: SecretStore = SecretStores.forDevice(File(dataDir, "sealed"), keyFile),
 ) {
-    private val secrets = DesktopSecretStore(File(dataDir, "sealed"), keyFile)
 
     private fun signPubFile() = File(dataDir, "sign.pub")
     private fun encPubFile() = File(dataDir, "enc.pub")
@@ -178,7 +192,7 @@ class DesktopDeviceKeyring(
         return DeviceKeyInfo(
             deviceKey = KeyRef.ed25519(signPub).render(),
             deviceEncKey = KeyRef.x25519(enc.publicKey).render(),
-            tier = KeyTier.SOFTWARE,
+            tier = secrets.tier,
             certToken = cert,
             userId = cert?.let { runCatching { MembershipOp.user(it) }.getOrNull() },
             knownOps = if (cert != null) knownOps() else emptyList(),
