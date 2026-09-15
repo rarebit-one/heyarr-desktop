@@ -35,8 +35,11 @@ jobs:
       # target in :core / :ui (they register it only when an SDK is present — see their
       # build scripts). Without this step the build stays JVM-only, exactly like a
       # desktop dev box with no SDK. Matches heyarr-mobile's known-green setup.
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # Use the runner's preinstalled Android SDK + accept licenses deterministically
+      # (android-actions/setup-android re-downloads cmdline-tools whose license re-accept
+      # fails non-interactively). Same fix as android.yml / android-release.yml.
+      - name: Accept Android SDK licenses
+        run: yes | "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4

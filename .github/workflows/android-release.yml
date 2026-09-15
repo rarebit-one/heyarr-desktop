@@ -55,7 +55,12 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
 
+      # Cache DISABLED for releases: a stale build-cache entry poisoned the release
+      # variant with older-Kotlin artifacts ("metadata 2.3.0, expected 2.0.0"). Releases
+      # are infrequent — correctness over cache speed; always compile from clean.
       - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+        with:
+          cache-disabled: true
 
       - name: Assemble the signed release APK
         env:
