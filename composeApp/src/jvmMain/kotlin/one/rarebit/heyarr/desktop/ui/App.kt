@@ -124,9 +124,15 @@ fun App(
     initialLibraryTab: Int = 0,
     /** Called when the player wants the window fullscreen (Main flips the WindowState placement). */
     onFullscreen: (Boolean) -> Unit = {},
+    /**
+     * Turn on the real desktop device-enrol stack ("Sign in to save" over guest). The
+     * desktop entry point ([one.rarebit.heyarr.desktop.MainKt]) sets this true; previews /
+     * tests leave it false so they stay guest and touch no device key store.
+     */
+    enableDeviceEnrol: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
-    val session = remember { AppSession(settings, transport, player, OpenExternally(downloader, opener), scope, artworkLoader, externalMetadata, mdns) }
+    val session = remember { AppSession(settings, transport, player, OpenExternally(downloader, opener), scope, artworkLoader, externalMetadata, mdns, enableDeviceEnrol) }
     val nav = remember { Nav(initialRoute) }
     val search = remember { SearchController(scope, { session.api }, session::noteTransportFailure) }
     val home = remember { HomeState() }

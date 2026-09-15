@@ -73,6 +73,7 @@ fun SettingsScreen(session: AppSession, state: SettingsState, onSourcesChanged: 
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 32.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         item { SectionHeader("Settings") }
         item { ConnectionPanel(session) }
+        item { one.rarebit.heyarr.desktop.ui.EnrolPanel(session) }
         if (session.isGuest) item {
             Panel("Followed sources & peers") {
                 Notice(
@@ -122,7 +123,7 @@ private fun ConnectionPanel(session: AppSession) {
         }
         KeyValue("status", session.connection.name.lowercase().replace('_', ' '))
         KeyValue("signed in as", if (session.isGuest) "guest — browse & play only" else "enrolled — token presented", valueColor = if (session.isGuest) Tokens.textMuted else Tokens.success)
-        Text("On a trusted network you browse and play as a guest with no token. Add a bearer token to sign in and save wants, follows and your place. Saved to ~/.config/heyarr-desktop/config.json (0600); the token is a secret. Device/QR (Voidbind) sign-in is the next upgrade and is not wired on desktop yet.", style = MaterialTheme.typography.bodySmall, color = Tokens.textDisabled)
+        Text("On a trusted network you browse and play as a guest with no token. Add a bearer token to sign in and save wants, follows and your place. Saved to ~/.config/heyarr-desktop/config.json (0600); the token is a secret. Prefer device sign-in? Use “Sign in to save” below to pair this desktop with Voidbind — the primary, offline credential.", style = MaterialTheme.typography.bodySmall, color = Tokens.textDisabled)
     }
 }
 

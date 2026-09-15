@@ -29,7 +29,13 @@ import one.rarebit.heyarr.core.heyarr.QualityProfile
 import one.rarebit.heyarr.core.mcp.McpRefusedException
 import one.rarebit.heyarr.core.mcp.McpTransportException
 import one.rarebit.heyarr.core.net.HttpTransport
+import one.rarebit.heyarr.desktop.device.DesktopDeviceEnroller
+import one.rarebit.heyarr.desktop.device.DesktopDeviceKeyring
+import one.rarebit.heyarr.desktop.device.DevicePairingSteps
+import one.rarebit.heyarr.desktop.device.PairingCoordinator
 import one.rarebit.heyarr.desktop.login.BearerTokenLogin
+import one.rarebit.heyarr.desktop.login.DeviceEnroller
+import one.rarebit.heyarr.desktop.login.DeviceLogin
 import one.rarebit.heyarr.desktop.login.EnrolUpgrade
 import one.rarebit.heyarr.desktop.open.OpenExternally
 import one.rarebit.heyarr.desktop.playback.Player
@@ -83,7 +89,38 @@ class AppSession(
     externalMetadata: ExternalMetadata? = null,
     /** LAN mDNS browser for auto-discovery; the no-op default keeps previews/tests network-free. */
     mdns: MdnsResolver = NoMdnsResolver,
+    /**
+     * Turn on the REAL desktop device-enrol stack (a filesystem-backed [DesktopDeviceKeyring],
+     * its [PairingCoordinator] and the device-credential enroller). Off by default so previews
+     * and tests stay guest and touch no disk / no device key store; the desktop entry point
+     * ([one.rarebit.heyarr.desktop.MainKt]) turns it on.
+     */
+    enableDeviceEnrol: Boolean = false,
 ) {
+    /** This desktop's device keys (sealed signing seed + enc key + admission), or null in previews/tests. */
+    val deviceKeyring: DesktopDeviceKeyring? = if (enableDeviceEnrol) DesktopDeviceKeyring() else null
+
+    /** The device-credential enrol upgrade — real when enrolment is enabled, else inert. */
+    private val enroller: DeviceEnroller =
+        deviceKeyring?.let { DesktopDeviceEnroller(it) } ?: DeviceEnroller.NotEnrolled
+
+    /** The pairing coordinator that drives "Sign in to save"; null when enrolment is disabled. */
+    val pairing: PairingCoordinator? = deviceKeyring?.let { ring ->
+        PairingCoordinator(
+            scope,
+            steps = {
+                DevicePairingSteps(
+                    keyring = ring,
+                    nodeTransport = transport,
+                    baseUrl = { config.baseUrl },
+                    deviceName = { defaultDeviceName() },
+                    // The register lane's fallback credential: a pasted bearer if there is one,
+                    // never the device credential we are in the middle of enrolling.
+                    credential = { BearerTokenLogin { config.bearerToken }.credential() },
+                )
+            },
+        )
+    }
     var config: DesktopConfig by mutableStateOf(settings.load())
         private set
 
@@ -91,7 +128,10 @@ class AppSession(
 
     // The "Sign in to save" enrol upgrade over the guest default: a device credential wins,
     // else a pasted bearer token, else [Credential.Guest] (no header → trusted-network guest).
-    private val enrol = EnrolUpgrade(bearer = BearerTokenLogin { config.bearerToken })
+    private val enrol = EnrolUpgrade(
+        device = DeviceLogin(enroller),
+        bearer = BearerTokenLogin { config.bearerToken },
+    )
 
     /** The credential the client presents right now — never null; guest when nothing is enrolled. */
     val credential: Credential get() = enrol.credential()
@@ -161,6 +201,29 @@ class AppSession(
         if (otherNode) { profiles = emptyList(); index = LibraryIndex.EMPTY; generation++ }
         refreshIndex()
         startHeartbeat()
+    }
+
+    /**
+     * The presented credential changed out-of-band (a device enrolment just completed, or
+     * was forgotten) — the client was a guest and is now enrolled, or vice-versa. Rebuild
+     * the session as [save] does for a node change: drop the owner-only caches, bump the
+     * generation so screens reload, and re-probe. The credential itself is recomputed
+     * live by [credential]; this only refreshes what depends on being enrolled.
+     */
+    fun reauthenticated() {
+        profiles = emptyList()
+        index = LibraryIndex.EMPTY
+        generation++
+        connection = if (config.baseUrl.isBlank()) Connection.UNCONFIGURED else Connection.UNKNOWN
+        refreshIndex()
+        startHeartbeat()
+    }
+
+    /** The name this desktop presents at enrolment (`POST /enrol` `name`) — hostname, else the OS user. */
+    private fun defaultDeviceName(): String {
+        val host = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.takeIf { it.isNotBlank() }
+        val user = System.getProperty("user.name")?.takeIf { it.isNotBlank() }
+        return host ?: user?.let { "$it's desktop" } ?: "heyarr desktop"
     }
 
     // ── connectivity ─────────────────────────────────────────────────────────────
