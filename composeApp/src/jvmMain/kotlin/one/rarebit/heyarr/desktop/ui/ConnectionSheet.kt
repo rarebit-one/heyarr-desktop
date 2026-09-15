@@ -110,7 +110,8 @@ fun ConnectionSheet(session: AppSession, state: ConnectionState, onClose: () -> 
                     KeyValue("last success", session.lastOkAt?.let { ago(it) } ?: "never")
                     KeyValue("probes", "${session.probes} sent · ${session.failures} failed" + (session.lastFailure?.let { " · last: $it" } ?: ""))
                     KeyValue("heartbeat", "every 30 s while online, every 8 s while not")
-                    KeyValue("token", if (session.config.bearerToken.isBlank()) "none" else "bearer, ${session.config.bearerToken.trim().length} chars, in ~/.config/heyarr-desktop/config.json (0600)")
+                    KeyValue("mode", if (session.isGuest) "guest — browsing without a login (browse & play)" else "signed in", valueColor = if (session.isGuest) Tokens.textMuted else Tokens.success)
+                    KeyValue("token", if (session.config.bearerToken.isBlank()) "none (guest)" else "bearer, ${session.config.bearerToken.trim().length} chars, in ~/.config/heyarr-desktop/config.json (0600)")
                     KeyValue("ui scale", "${session.config.effectiveUiScale()}×")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         PrimaryButton("Test now", { scope.launch { session.probe() } }, compact = true)

@@ -46,6 +46,10 @@ fun main(args: Array<String>) {
     for ((name, route) in shots) for ((w, h) in sizes) {
         render(File(out, "$name.png"), w, h, route, query = if (name.endsWith("results")) "dune" else null)
     }
+    // Guest mode: no token, browsing as an anonymous guest — the "Sign in to save" affordance
+    // shows and the personal rails (continue / missing / following) are hidden.
+    render(File(out, "01c-home-guest.png"), 1280, 900, Route.Home, guest = true)
+    render(File(out, "09c-settings-guest.png"), 1280, 900, Route.Settings, guest = true)
     // A small window, to show the compact nav and reflow.
     render(File(out, "09b-connection.png"), 1280, 900, Route.Home, connection = true)
     render(File(out, "10-home-compact.png"), 760, 620, Route.Home)
@@ -53,9 +57,10 @@ fun main(args: Array<String>) {
     println("wrote ${out.listFiles()?.size ?: 0} screenshots to $out")
 }
 
-private fun render(file: File, width: Int, height: Int, route: Route, query: String? = null, connection: Boolean = false, downloads: Boolean = false) {
+private fun render(file: File, width: Int, height: Int, route: Route, query: String? = null, connection: Boolean = false, downloads: Boolean = false, guest: Boolean = false) {
     val transport = FakeHeyarrTransport()
-    val settings = InMemorySettingsStore(DesktopConfig(baseUrl = "https://heyarr.example.test:7777", bearerToken = "heyarr_fixture_token"))
+    // A guest carries no token (browses on a trusted network); everyone else pastes one.
+    val settings = InMemorySettingsStore(DesktopConfig(baseUrl = "https://heyarr.example.test:7777", bearerToken = if (guest) "" else "heyarr_fixture_token"))
     val art = ArtworkLoader({ "" }, { "" }, fetcher = { PlaceholderArt.bytes(it) })
     ImageComposeScene(width = width, height = height, density = Density(1f)).use { scene ->
         scene.setContent {

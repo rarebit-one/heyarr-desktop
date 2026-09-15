@@ -5,6 +5,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import one.rarebit.heyarr.desktop.discovery.JmdnsResolver
 import one.rarebit.heyarr.desktop.net.JdkHttpTransport
 import one.rarebit.heyarr.desktop.playback.MpvPlayer
 import one.rarebit.heyarr.desktop.settings.FileSettingsStore
@@ -29,6 +30,7 @@ fun main() = application {
             settings = FileSettingsStore(),
             transport = JdkHttpTransport(),
             player = MpvPlayer(),
+            mdns = JmdnsResolver(),
             onFullscreen = { on -> state.placement = if (on) WindowPlacement.Fullscreen else WindowPlacement.Floating },
         )
     }

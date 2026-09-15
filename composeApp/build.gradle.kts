@@ -38,6 +38,12 @@ kotlin {
                 implementation("net.java.dev.jna:jna:5.14.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
 
+                // mDNS / DNS-SD browser for auto-discovery of the `_heyarr._tcp` node
+                // (heyarr-core Phase 2). jmdns is a small pure-JVM Bonjour implementation
+                // on Maven Central (not GitHub Packages) with no native bits — the desktop
+                // MdnsResolver actual wraps it; the fallback chain itself lives in pure :core.
+                implementation("org.jmdns:jmdns:3.5.9")
+
                 // ── Voidbind login (device/QR) — OPTIONAL, currently STUBBED ──────────
                 // Resolving voidbind-client needs a GitHub PAT with read:packages, which
                 // this environment does NOT have. So Voidbind login lives behind

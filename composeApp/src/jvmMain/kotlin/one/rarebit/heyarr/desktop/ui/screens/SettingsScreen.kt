@@ -63,6 +63,8 @@ fun SettingsScreen(session: AppSession, state: SettingsState, onSourcesChanged: 
     val scope = rememberCoroutineScope()
     fun load() {
         val a = session.api ?: return
+        // Followed sources and peers are enrolled surfaces; a guest cannot read them.
+        if (session.isGuest) return
         scope.launch { session.io { a.followed() }.onSuccess { state.followed = it } }
         scope.launch { session.io { a.peers() }.onSuccess { state.peers = it } }
     }
@@ -71,8 +73,18 @@ fun SettingsScreen(session: AppSession, state: SettingsState, onSourcesChanged: 
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 32.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         item { SectionHeader("Settings") }
         item { ConnectionPanel(session) }
-        item { FollowedPanel(session, state, { load(); onSourcesChanged() }) }
-        item { PeersPanel(session, state) }
+        if (session.isGuest) item {
+            Panel("Followed sources & peers") {
+                Notice(
+                    "Sign in to follow sources and manage peers.",
+                    detail = "Following, wants and peer sync are enrolled-only. Add a bearer token above to sign in.",
+                    tone = Tokens.slate,
+                )
+            }
+        } else {
+            item { FollowedPanel(session, state, { load(); onSourcesChanged() }) }
+            item { PeersPanel(session, state) }
+        }
         item { AppearancePanel(session) }
     }
 }
@@ -83,19 +95,34 @@ private fun ConnectionPanel(session: AppSession) {
     var baseUrl by remember(session.config) { mutableStateOf(session.config.baseUrl) }
     var token by remember(session.config) { mutableStateOf(session.config.bearerToken) }
     var testing by remember { mutableStateOf(false) }
+    var discovering by remember { mutableStateOf(false) }
     Panel("heyarr connection") {
         Field("Base URL", baseUrl, placeholder = DesktopConfig.DEFAULT_BASE_URL) { baseUrl = it }
-        Field("Bearer token (heyarr_<id>_<secret>)", token, secret = true) { token = it }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Auto-discovery: try mDNS on the LAN, else the split-horizon DNS name, and
+            // default the field to whatever is found. The user can still edit it by hand.
+            SecondaryButton("Discover", {
+                discovering = true
+                scope.launch {
+                    val found = session.discoverServer()
+                    baseUrl = found.baseUrl
+                    discovering = false
+                    session.toast(Toast.Kind.INFO, "Found via ${found.source.name.lowercase()}", found.baseUrl)
+                }
+            }, icon = Icons.Rounded.Sync, compact = true, enabled = !discovering)
+            GhostButton("Reset URL", { baseUrl = DesktopConfig.DEFAULT_BASE_URL })
+        }
+        Field("Bearer token (heyarr_<id>_<secret>) — optional; blank browses as a guest", token, secret = true) { token = it }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             PrimaryButton("Save", { session.save(DesktopConfig(baseUrl.trim(), token.trim())) }, icon = Icons.Rounded.Save, compact = true)
             SecondaryButton("Test connection", {
                 testing = true
                 scope.launch { session.probe(); testing = false; session.toast(if (session.connection == Connection.ONLINE) Toast.Kind.SUCCESS else Toast.Kind.ERROR, "Connection: ${session.connection.name.lowercase()}") }
-            }, compact = true, enabled = !testing && token.isNotBlank())
-            GhostButton("Reset URL", { baseUrl = DesktopConfig.DEFAULT_BASE_URL })
+            }, compact = true, enabled = !testing && baseUrl.isNotBlank())
         }
         KeyValue("status", session.connection.name.lowercase().replace('_', ' '))
-        Text("Saved to ~/.config/heyarr-desktop/config.json (0600). The token is a secret; moving it to the OS keyring is on the list. Voidbind device/QR login stays stubbed until voidbind-client is resolvable.", style = MaterialTheme.typography.bodySmall, color = Tokens.textDisabled)
+        KeyValue("signed in as", if (session.isGuest) "guest — browse & play only" else "enrolled — token presented", valueColor = if (session.isGuest) Tokens.textMuted else Tokens.success)
+        Text("On a trusted network you browse and play as a guest with no token. Add a bearer token to sign in and save wants, follows and your place. Saved to ~/.config/heyarr-desktop/config.json (0600); the token is a secret. Device/QR (Voidbind) sign-in is the next upgrade and is not wired on desktop yet.", style = MaterialTheme.typography.bodySmall, color = Tokens.textDisabled)
     }
 }
 

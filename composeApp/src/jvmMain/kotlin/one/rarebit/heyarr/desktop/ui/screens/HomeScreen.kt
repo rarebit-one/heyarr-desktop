@@ -90,10 +90,20 @@ fun HomeScreen(session: AppSession, state: HomeState, onOpen: (Route) -> Unit, o
             val r = session.io { a.listByType(t, limit = 40) }.fold(onSuccess = { RailState.Loaded(it.works) }, onFailure = { RailState.Failed(it.message ?: "failed") })
             state.byType = state.byType + (t to r)
         }
-        scope.launch { state.missing = session.io { a.missing(40) }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
-        scope.launch { state.upgrades = session.io { a.upgradeCandidates(40) }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
-        scope.launch { state.followed = session.io { a.followed() }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
-        scope.launch { state.continueRail = session.io { a.continueRail() }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+        // Missing / upgrades / following / continue are enrolled-only, personal surfaces —
+        // a guest cannot read them (they 403). Skip the calls and leave the rails empty so
+        // they simply don't render; the guest sees a "Sign in to save" affordance instead.
+        if (session.isGuest) {
+            state.missing = RailState.Loaded(emptyList())
+            state.upgrades = RailState.Loaded(emptyList())
+            state.followed = RailState.Loaded(emptyList())
+            state.continueRail = RailState.Loaded(emptyList())
+        } else {
+            scope.launch { state.missing = session.io { a.missing(40) }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+            scope.launch { state.upgrades = session.io { a.upgradeCandidates(40) }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+            scope.launch { state.followed = session.io { a.followed() }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+            scope.launch { state.continueRail = session.io { a.continueRail() }.fold(onSuccess = { RailState.Loaded(it) }, onFailure = { RailState.Failed(it.message ?: "failed") }) }
+        }
     }
 
     LaunchedEffect(session.config) { if (!state.loadedOnce || session.api != null) load() }
@@ -109,6 +119,14 @@ fun HomeScreen(session: AppSession, state: HomeState, onOpen: (Route) -> Unit, o
 
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 32.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(36.dp)) {
         item { SpotlightBlock(session, state, onOpen, onWant) }
+        if (session.isGuest) item {
+            Notice(
+                "Browsing as a guest — watch and listen freely, no account needed.",
+                detail = "Sign in to save your place, keep playlists, and want or follow things. Open Settings to sign in.",
+                icon = Icons.Rounded.Info,
+                tone = Tokens.slate,
+            )
+        }
         val cont = state.continueRail
         if (cont !is RailState.Loaded || cont.items.isNotEmpty()) item {
             Rail("Continue", cont, subtitle = "Unfinished playback sessions this node recorded — not history, just where a device stopped", emptyText = "", skeletonAspect = Aspect.SQUARE, skeletonWidth = 240.dp, key = { it.sessionId }) { e ->
@@ -134,9 +152,9 @@ fun HomeScreen(session: AppSession, state: HomeState, onOpen: (Route) -> Unit, o
                 }
             }
         }
-        item { WantRail("Wanted but missing", state.missing, session, onOpen, subtitle = "Wants nothing acceptable has satisfied yet", emptyText = "Nothing is missing — every want is satisfied.") }
-        item { WantRail("Could be better", state.upgrades, session, onOpen, subtitle = "Satisfied and monitored; a better release may still turn up", emptyText = "No upgrade candidates.") }
-        item {
+        if (!session.isGuest) item { WantRail("Wanted but missing", state.missing, session, onOpen, subtitle = "Wants nothing acceptable has satisfied yet", emptyText = "Nothing is missing — every want is satisfied.") }
+        if (!session.isGuest) item { WantRail("Could be better", state.upgrades, session, onOpen, subtitle = "Satisfied and monitored; a better release may still turn up", emptyText = "No upgrade candidates.") }
+        if (!session.isGuest) item {
             MediaScope(MediaType.PODCAST) {
                 Rail("Following", state.followed, subtitle = "Standing subscriptions the node polls", emptyText = "You follow nothing yet — add a feed or TVDB series in Settings.", skeletonAspect = CardAspect.SQUARE, skeletonWidth = Tokens.squareWidth, key = { it.id }) { s ->
                     val cover by rememberCover(session, MediaType.from(s.type), s.title, null, feedRef = s.feedRef)
