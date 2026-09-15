@@ -44,14 +44,27 @@ kotlin {
                 // MdnsResolver actual wraps it; the fallback chain itself lives in pure :core.
                 implementation("org.jmdns:jmdns:3.5.9")
 
-                // ── Voidbind login (device/QR) — OPTIONAL, currently STUBBED ──────────
-                // Resolving voidbind-client needs a GitHub PAT with read:packages, which
-                // this environment does NOT have. So Voidbind login lives behind
-                // login/VoidbindLogin.kt with a bearer-token stub, and this dependency
-                // stays commented so the build succeeds without the token. To enable:
-                // uncomment the GitHub Packages repo in settings.gradle.kts, then:
-                //
-                // implementation("one.rarebit.voidbind:voidbind-client:0.7.0")
+                // ── Voidbind device login (device enrolment + QR/pairing) ─────────────
+                // The shared device-auth brain: DeviceIdentity, DevicePairing (relay
+                // responder), the Invite/SAS handshake, PossessionProof + DeviceCredential
+                // and voidbind's own JdkHttpTransport for the relay. Already on :core's
+                // classpath (Credential.Device delegates to voidbind DeviceCredential);
+                // :composeApp now depends on it DIRECTLY so the desktop device/ package can
+                // drive the pairing flow. Resolves from the org's GitHub Packages repo
+                // (settings.gradle.kts) — CI passes GITHUB_ACTOR/GITHUB_TOKEN (desktop.yml),
+                // locally gpr.user/gpr.token in ~/.gradle/gradle.properties.
+                implementation("one.rarebit.voidbind:voidbind-client:0.7.0")
+
+                // The plain-JVM DeviceKeyStore actual voidbind ships is a NON-persisted,
+                // process-lifetime software key (regenerated each launch) and never exposes
+                // its seed, so it cannot back an enrolment that survives a restart. The
+                // desktop keyring therefore holds its OWN Ed25519 signing seed, sealed at
+                // rest, and signs through the SAME vetted provider voidbind uses internally
+                // (cryptography-kotlin 0.6.0) so seed / public-key / signature bytes are
+                // wire-identical. voidbind depends on this only as `implementation`, so it
+                // must be declared here to reach :composeApp's COMPILE classpath.
+                implementation("dev.whyoleg.cryptography:cryptography-core:0.6.0")
+                implementation("dev.whyoleg.cryptography:cryptography-provider-optimal:0.6.0")
             }
         }
         val jvmTest by getting {
