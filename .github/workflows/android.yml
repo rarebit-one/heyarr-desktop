@@ -34,8 +34,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # Use the runner's preinstalled Android SDK and accept licenses deterministically.
+      # (android-actions/setup-android re-downloads a newer cmdline-tools whose license
+      # re-accept fails non-interactively — "6 of 7 licenses not accepted".)
+      - name: Accept Android SDK licenses
+        run: yes | "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4

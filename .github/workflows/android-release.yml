@@ -48,7 +48,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+      # Use the runner's preinstalled Android SDK + accept licenses deterministically
+      # (android-actions/setup-android re-downloads cmdline-tools whose license re-accept
+      # fails non-interactively — "6 of 7 licenses not accepted"). ANDROID_HOME stays set,
+      # so the later apksigner step (build-tools) still resolves.
+      - name: Accept Android SDK licenses
+        run: yes | "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
 
       - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
 
